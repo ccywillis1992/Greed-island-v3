@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { storage } from '../lib/storage';
 import { computePositions, computeSummaryNumbers } from '../lib/calc';
+import { exportToExcel } from '../lib/export';
 import {
   syncDailySnapshot,
   editSnapshot,
@@ -25,6 +26,7 @@ import {
   ShieldAlert,
   RefreshCw,
   TrendingUp,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 export const History: React.FC = () => {
@@ -150,16 +152,36 @@ export const History: React.FC = () => {
           </h1>
           <span className="text-xl font-medium tracking-tight text-[#f5f5f7]">Snapshot History</span>
         </div>
-        <Button
-          id="add-historic-snapshot-btn"
-          variant="secondary"
-          size="sm"
-          onClick={() => setIsAddingNew(true)}
-          className="gap-1.5"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Add Entry</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            id="history-export-excel-btn"
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              const res = exportToExcel();
+              if (res.success) {
+                setStatusMessage({ type: 'success', text: `Exported ${res.filename} with 6 sheets!` });
+              } else {
+                setStatusMessage({ type: 'error', text: `Export failed: ${res.error}` });
+              }
+            }}
+            className="gap-1.5 text-xs bg-[#1c1c1e] text-emerald-400 border border-emerald-500/20 hover:bg-[#2c2c2e]"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Export Excel</span>
+          </Button>
+
+          <Button
+            id="add-historic-snapshot-btn"
+            variant="secondary"
+            size="sm"
+            onClick={() => setIsAddingNew(true)}
+            className="gap-1.5"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add Entry</span>
+          </Button>
+        </div>
       </header>
 
       {/* HK Cutoff Status Card */}

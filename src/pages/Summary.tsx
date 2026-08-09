@@ -28,6 +28,8 @@ import {
   setCustomWorkerUrl,
   PriceFetchResult,
 } from '../lib/priceApi';
+import { exportToExcel } from '../lib/export';
+import { BackupModal } from '../components/BackupModal';
 import { Market, MarketFilter, BrokerFilter, DailySnapshot, Position } from '../types';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
@@ -54,6 +56,8 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Sparkles,
+  FileSpreadsheet,
+  Download,
 } from 'lucide-react';
 
 export const Summary: React.FC = () => {
@@ -273,6 +277,24 @@ export const Summary: React.FC = () => {
     setIsFetchingPrice(false);
   };
 
+  const [exportStatus, setExportStatus] = useState<string | null>(null);
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
+
+  const handleExportExcel = () => {
+    const res = exportToExcel({
+      marketFilter: selectedMarket,
+      brokerFilter: selectedBroker,
+    });
+
+    if (res.success) {
+      setExportStatus(`Exported ${res.filename} successfully!`);
+      setTimeout(() => setExportStatus(null), 4000);
+    } else {
+      setExportStatus(`Export failed: ${res.error || 'Unknown error'}`);
+      setTimeout(() => setExportStatus(null), 5000);
+    }
+  };
+
   const hkInfo = getHongKongDateAndCutoff();
 
   // Recharts data preparation
@@ -302,6 +324,30 @@ export const Summary: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            id="backup-restore-trigger-btn"
+            variant="secondary"
+            size="sm"
+            onClick={() => setIsBackupModalOpen(true)}
+            className="gap-1.5 text-xs bg-[#1c1c1e] hover:bg-[#2c2c2e] text-purple-400 border border-purple-500/20 shadow-md"
+            title="JSON Backup & Restore (Module 12)"
+          >
+            <Database className="w-3.5 h-3.5 text-purple-400" />
+            <span>Backup</span>
+          </Button>
+
+          <Button
+            id="export-excel-btn"
+            variant="secondary"
+            size="sm"
+            onClick={handleExportExcel}
+            className="gap-1.5 text-xs bg-[#1c1c1e] hover:bg-[#2c2c2e] text-emerald-400 border border-emerald-500/20 shadow-md"
+            title="Download full portfolio backup Excel file (.xlsx)"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Export Excel</span>
+          </Button>
+
           <NavLink to="/stock-form">
             <Button variant="primary" size="sm" className="gap-1 text-xs">
               <PlusCircle className="w-3.5 h-3.5" />
@@ -310,6 +356,19 @@ export const Summary: React.FC = () => {
           </NavLink>
         </div>
       </header>
+
+      {/* Export Toast Banner */}
+      {exportStatus && (
+        <div className="p-3 bg-emerald-950/80 border border-emerald-500/30 rounded-xl text-emerald-200 text-xs flex items-center justify-between font-mono shadow-xl backdrop-blur-md">
+          <div className="flex items-center gap-2">
+            <FileSpreadsheet className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{exportStatus}</span>
+          </div>
+          <button onClick={() => setExportStatus(null)} className="text-[#86868b] hover:text-white text-xs">
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Storage Error Alert Banner */}
       {storageError && (
@@ -936,6 +995,13 @@ export const Summary: React.FC = () => {
           </div>
         )}
       </section>
+
+      {/* Module 12: Backup & Restore Modal */}
+      <BackupModal
+        isOpen={isBackupModalOpen}
+        onClose={() => setIsBackupModalOpen(false)}
+        onRestoreSuccess={refreshStorageStats}
+      />
     </div>
   );
 };
