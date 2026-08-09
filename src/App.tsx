@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Navigation } from './components/Navigation';
 import { Summary } from './pages/Summary';
 import { StockDetail } from './pages/StockDetail';
@@ -10,7 +10,7 @@ import { History } from './pages/History';
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <div className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased selection:bg-emerald-500 selection:text-slate-950">
         <main className="max-w-md mx-auto px-4 pt-6 pb-24">
           <Routes>
@@ -21,10 +21,11 @@ export default function App() {
             <Route path="/cash" element={<CashDetail />} />
             <Route path="/other" element={<OtherProductDetail />} />
             <Route path="/history" element={<History />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
         <Navigation />
       </div>
-    </BrowserRouter>
+    </HashRouter>
   );
 }

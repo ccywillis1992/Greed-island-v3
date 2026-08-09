@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Greed Island — Portfolio Tracker</title>
+    <script>
+      // SPA redirect for GitHub Pages subpath hosting
+      var path = window.location.pathname;
+      var repo = '/Greed-island-v3/';
+      if (path.startsWith(repo)) {
+        var subpath = path.substring(repo.length);
+        window.location.replace(repo + '#/' + subpath + window.location.search + window.location.hash);
+      } else {
+        window.location.replace('./#/' + window.location.search + window.location.hash);
+      }
+    </script>
+  </head>
+  <body>
+    <p>Redirecting to Greed Island Portfolio...</p>
+  </body>
+</html>
