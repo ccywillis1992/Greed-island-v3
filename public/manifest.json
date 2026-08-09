@@ -1,26 +1,37 @@
 {
-  "short_name": "GreedIsland",
-  "name": "Greed Island Asset Tracker",
+  "short_name": "Greed Island",
+  "name": "Greed Island Portfolio",
+  "description": "Minimalist multi-asset investment portfolio tracker for US/HK stocks, crypto, cash, and private assets.",
   "icons": [
     {
       "src": "icon.svg",
       "type": "image/svg+xml",
-      "sizes": "512x512 192x192 any"
+      "sizes": "192x192 512x512 any",
+      "purpose": "any"
     },
     {
       "src": "pwa-192.png",
       "type": "image/png",
-      "sizes": "192x192"
+      "sizes": "192x192",
+      "purpose": "any maskable"
     },
     {
       "src": "pwa-512.png",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "apple-touch-icon.png",
+      "type": "image/png",
+      "sizes": "180x180"
     }
   ],
   "start_url": "./",
-  "background_color": "#090d16",
-  "theme_color": "#090d16",
+  "scope": "./",
+  "background_color": "#0a0a0c",
+  "theme_color": "#0a0a0c",
   "display": "standalone",
-  "orientation": "portrait"
+  "orientation": "any",
+  "categories": ["finance", "utilities"]
 }

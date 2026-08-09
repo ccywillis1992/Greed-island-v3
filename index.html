@@ -2,18 +2,25 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Greed Island - Asset Tracker</title>
-    <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#090d16" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Greed Island — Portfolio Tracker</title>
+    
+    <!-- PWA Manifest & Icons -->
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
+    
+    <!-- Mobile & PWA Meta Tags -->
+    <meta name="theme-color" content="#0a0a0c" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Greed Island" />
-    <link rel="apple-touch-icon" href="/pwa-192.png" />
+    <meta name="application-name" content="Greed Island" />
+    <meta name="description" content="Minimalist multi-asset investment portfolio tracker for US/HK stocks, crypto, cash, and private assets." />
   </head>
-  <body class="bg-[#0a0a0a] text-[#f5f5f7] antialiased selection:bg-[#007AFF] selection:text-white min-h-screen font-sans">
+  <body class="bg-[#0a0a0c] text-[#f5f5f7] antialiased selection:bg-[#007AFF] selection:text-white min-h-screen font-sans">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

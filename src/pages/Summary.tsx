@@ -30,6 +30,7 @@ import {
 } from '../lib/priceApi';
 import { exportToExcel } from '../lib/export';
 import { BackupModal } from '../components/BackupModal';
+import { PWAInstallBanner } from '../components/PWAInstallBanner';
 import { Market, MarketFilter, BrokerFilter, DailySnapshot, Position } from '../types';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
@@ -356,6 +357,9 @@ export const Summary: React.FC = () => {
           </NavLink>
         </div>
       </header>
+
+      {/* PWA Install Banner */}
+      <PWAInstallBanner />
 
       {/* Export Toast Banner */}
       {exportStatus && (
