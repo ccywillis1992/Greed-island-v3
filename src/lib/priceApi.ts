@@ -140,54 +140,51 @@ export async function convertHkdToUsd(hkdAmount: number): Promise<number> {
 async function fetchDirectFallback(ticker: string, market: Market): Promise<PriceFetchResult> {
   const { symbol, formattedTicker } = normalizeSymbolClient(ticker, market);
 
-  // 1. First try local server route /api/price (runs server-side, no browser CORS issues on mobile or desktop)
-  try {
-    const localApiUrl = `/api/price?ticker=${encodeURIComponent(formattedTicker)}&market=${market}`;
-    const res = await fetch(localApiUrl);
-    if (res.ok) {
-      const json = await res.json();
-      if (typeof json.price === 'number') {
-        return {
-          success: true,
-          ticker: json.ticker || formattedTicker,
-          market: json.market || market,
-          symbol: json.symbol || symbol,
-          price: json.price,
-          currency: 'USD',
-          rawPrice: json.rawPrice,
-          rawCurrency: json.rawCurrency,
-          fetchedAt: json.fetchedAt || new Date().toISOString(),
-          status: 200,
-        };
+  // 1. First try local server route /api/price (only when running on Node/Express server, not static GitHub Pages)
+  const isStaticHost = typeof window !== 'undefined' && window.location.hostname.endsWith('github.io');
+  if (!isStaticHost) {
+    try {
+      const localApiUrl = `/api/price?ticker=${encodeURIComponent(formattedTicker)}&market=${market}`;
+      const res = await fetch(localApiUrl);
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
+        const json = await res.json();
+        if (typeof json.price === 'number') {
+          return {
+            success: true,
+            ticker: json.ticker || formattedTicker,
+            market: json.market || market,
+            symbol: json.symbol || symbol,
+            price: json.price,
+            currency: 'USD',
+            rawPrice: json.rawPrice,
+            rawCurrency: json.rawCurrency,
+            fetchedAt: json.fetchedAt || new Date().toISOString(),
+            status: 200,
+          };
+        }
       }
-    } else if (res.status === 404 || res.status === 422 || res.status === 400) {
-      const json = await res.json().catch(() => ({}));
-      return {
-        success: false,
-        ticker: formattedTicker,
-        market,
-        symbol,
-        error: json.error || `Price API returned status ${res.status}`,
-        status: res.status,
-      };
+    } catch (e) {
+      // Local /api/price not available or static environment
     }
-  } catch (e) {
-    // Local /api/price not available (e.g. static host like GitHub Pages)
   }
 
-  // 2. Secondary fallback for static environments without custom worker
-  const rawYahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
+  // 2. Secondary fallbacks for static environments (e.g. GitHub Pages) without custom worker
+  const yahooUrl2 = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
+  const yahooUrl1 = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
   
   const urlsToTry = [
-    `https://corsproxy.io/?${encodeURIComponent(rawYahooUrl)}`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(rawYahooUrl)}`,
-    rawYahooUrl,
+    { url: yahooUrl2, isWrapped: false },
+    { url: yahooUrl1, isWrapped: false },
+    { url: `https://api.allorigins.win/get?url=${encodeURIComponent(yahooUrl2)}`, isWrapped: true },
+    { url: `https://proxy.cors.sh/${yahooUrl2}`, isWrapped: false },
+    { url: `https://corsproxy.io/?${encodeURIComponent(yahooUrl2)}`, isWrapped: false },
   ];
 
   let lastError = '';
   let lastStatus = 500;
 
-  for (const url of urlsToTry) {
+  for (const { url, isWrapped } of urlsToTry) {
     try {
       const res = await fetch(url);
       if (!res.ok) {
@@ -206,17 +203,19 @@ async function fetchDirectFallback(ticker: string, market: Market): Promise<Pric
         continue;
       }
 
-      const data = await res.json();
+      let data = await res.json();
+      if (isWrapped && data && typeof data.contents === 'string') {
+        try {
+          data = JSON.parse(data.contents);
+        } catch (e) {
+          lastError = 'Failed to parse wrapped JSON from proxy';
+          continue;
+        }
+      }
+
       const result = data?.chart?.result?.[0];
       if (!result) {
-        return {
-          success: false,
-          ticker: formattedTicker,
-          market,
-          symbol,
-          error: `Ticker '${formattedTicker}' not found or invalid upstream response format`,
-          status: 404,
-        };
+        continue;
       }
 
       const meta = result.meta;
@@ -264,7 +263,7 @@ async function fetchDirectFallback(ticker: string, market: Market): Promise<Pric
     ticker: formattedTicker,
     market,
     symbol,
-    error: `Direct fetch failed (${lastError}). Please enter your deployed Cloudflare Worker URL in Settings to enable live prices.`,
+    error: `Direct fetch failed (${lastError}). Deploy and enter your Cloudflare Worker URL in Settings for guaranteed price updates.`,
     status: lastStatus,
   };
 }
