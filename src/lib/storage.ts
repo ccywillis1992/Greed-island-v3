@@ -1,0 +1,419 @@
+import {
+  Trade,
+  CashEntry,
+  OtherProductRecord,
+  DailySnapshot,
+  PriceCacheEntry,
+  AppSettings,
+  StorageOperationResult,
+} from '../types';
+
+export const STORAGE_KEYS = {
+  TRADES: 'greedisland:trades',
+  CASH: 'greedisland:cash',
+  OTHER_PRODUCTS: 'greedisland:otherProducts',
+  SNAPSHOTS: 'greedisland:snapshots',
+  PRICE_CACHE: 'greedisland:priceCache',
+  SETTINGS: 'greedisland:settings',
+  SCHEMA_VERSION: 'greedisland:schemaVersion',
+} as const;
+
+export const CURRENT_SCHEMA_VERSION = 1;
+
+export const STORAGE_ERROR_EVENT = 'greedisland:storage_error';
+
+/**
+ * Dispatches a custom window event when a storage operation fails,
+ * enabling user-facing toast / alert banners.
+ */
+function notifyStorageError(key: string, errorMsg: string) {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent(STORAGE_ERROR_EVENT, {
+        detail: { key, error: errorMsg, timestamp: new Date().toISOString() },
+      })
+    );
+  }
+}
+
+/**
+ * Defensive localStorage reader
+ */
+export function getItem<T>(key: string, defaultValue: T): T {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return defaultValue;
+    }
+    const raw = localStorage.getItem(key);
+    if (raw === null) return defaultValue;
+    return JSON.parse(raw) as T;
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[Greed Island Storage] Read error for key "${key}":`, errorMsg);
+    notifyStorageError(key, `Failed to read storage key "${key}": ${errorMsg}`);
+    return defaultValue;
+  }
+}
+
+/**
+ * Defensive localStorage writer
+ */
+export function setItem<T>(key: string, value: T): StorageOperationResult {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      const error = 'LocalStorage is not supported or unavailable in this environment.';
+      notifyStorageError(key, error);
+      return { success: false, error };
+    }
+    const serialized = JSON.stringify(value);
+    localStorage.setItem(key, serialized);
+    return { success: true };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[Greed Island Storage] Write error for key "${key}":`, errorMsg);
+    notifyStorageError(key, `Failed to save data to localStorage: ${errorMsg}`);
+    return { success: false, error: errorMsg };
+  }
+}
+
+/**
+ * Defensive localStorage remover
+ */
+export function removeItem(key: string): StorageOperationResult {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return { success: false, error: 'LocalStorage unavailable' };
+    }
+    localStorage.removeItem(key);
+    return { success: true };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    notifyStorageError(key, errorMsg);
+    return { success: false, error: errorMsg };
+  }
+}
+
+// ==========================================
+// TRADES CRUD
+// ==========================================
+export function getTrades(): Trade[] {
+  return getItem<Trade[]>(STORAGE_KEYS.TRADES, []);
+}
+
+export function saveTrades(trades: Trade[]): StorageOperationResult {
+  return setItem<Trade[]>(STORAGE_KEYS.TRADES, trades);
+}
+
+export function addTrade(trade: Trade): StorageOperationResult {
+  const current = getTrades();
+  return saveTrades([...current, trade]);
+}
+
+export function updateTrade(trade: Trade): StorageOperationResult {
+  const current = getTrades();
+  const index = current.findIndex((t) => t.id === trade.id);
+  if (index === -1) {
+    return { success: false, error: `Trade with ID ${trade.id} not found` };
+  }
+  const updated = [...current];
+  updated[index] = trade;
+  return saveTrades(updated);
+}
+
+export function deleteTrade(id: string): StorageOperationResult {
+  const current = getTrades();
+  const filtered = current.filter((t) => t.id !== id);
+  return saveTrades(filtered);
+}
+
+// ==========================================
+// CASH ENTRIES CRUD
+// ==========================================
+export function getCashEntries(): CashEntry[] {
+  return getItem<CashEntry[]>(STORAGE_KEYS.CASH, []);
+}
+
+export function saveCashEntries(entries: CashEntry[]): StorageOperationResult {
+  return setItem<CashEntry[]>(STORAGE_KEYS.CASH, entries);
+}
+
+export function addCashEntry(entry: CashEntry): StorageOperationResult {
+  const current = getCashEntries();
+  return saveCashEntries([...current, entry]);
+}
+
+export function updateCashEntry(entry: CashEntry): StorageOperationResult {
+  const current = getCashEntries();
+  const index = current.findIndex((c) => c.id === entry.id);
+  if (index === -1) {
+    return { success: false, error: `CashEntry with ID ${entry.id} not found` };
+  }
+  const updated = [...current];
+  updated[index] = entry;
+  return saveCashEntries(updated);
+}
+
+export function deleteCashEntry(id: string): StorageOperationResult {
+  const current = getCashEntries();
+  const filtered = current.filter((c) => c.id !== id);
+  return saveCashEntries(filtered);
+}
+
+// ==========================================
+// OTHER PRODUCTS CRUD
+// ==========================================
+export function getOtherProducts(): OtherProductRecord[] {
+  return getItem<OtherProductRecord[]>(STORAGE_KEYS.OTHER_PRODUCTS, []);
+}
+
+export function saveOtherProducts(records: OtherProductRecord[]): StorageOperationResult {
+  return setItem<OtherProductRecord[]>(STORAGE_KEYS.OTHER_PRODUCTS, records);
+}
+
+export function addOtherProduct(record: OtherProductRecord): StorageOperationResult {
+  const current = getOtherProducts();
+  return saveOtherProducts([...current, record]);
+}
+
+export function updateOtherProduct(record: OtherProductRecord): StorageOperationResult {
+  const current = getOtherProducts();
+  const index = current.findIndex((p) => p.id === record.id);
+  if (index === -1) {
+    return { success: false, error: `OtherProductRecord with ID ${record.id} not found` };
+  }
+  const updated = [...current];
+  updated[index] = record;
+  return saveOtherProducts(updated);
+}
+
+export function deleteOtherProduct(id: string): StorageOperationResult {
+  const current = getOtherProducts();
+  const filtered = current.filter((p) => p.id !== id);
+  return saveOtherProducts(filtered);
+}
+
+// ==========================================
+// DAILY SNAPSHOTS CRUD
+// ==========================================
+export function getSnapshots(): DailySnapshot[] {
+  return getItem<DailySnapshot[]>(STORAGE_KEYS.SNAPSHOTS, []);
+}
+
+export function saveSnapshots(snapshots: DailySnapshot[]): StorageOperationResult {
+  return setItem<DailySnapshot[]>(STORAGE_KEYS.SNAPSHOTS, snapshots);
+}
+
+export function addSnapshot(snapshot: DailySnapshot): StorageOperationResult {
+  const current = getSnapshots();
+  const index = current.findIndex((s) => s.date === snapshot.date);
+  if (index >= 0) {
+    const updated = [...current];
+    updated[index] = snapshot;
+    return saveSnapshots(updated);
+  }
+  return saveSnapshots([...current, snapshot]);
+}
+
+// ==========================================
+// PRICE CACHE CRUD
+// ==========================================
+export function getPriceCache(): Record<string, PriceCacheEntry> {
+  return getItem<Record<string, PriceCacheEntry>>(STORAGE_KEYS.PRICE_CACHE, {});
+}
+
+export function savePriceCache(cache: Record<string, PriceCacheEntry>): StorageOperationResult {
+  return setItem<Record<string, PriceCacheEntry>>(STORAGE_KEYS.PRICE_CACHE, cache);
+}
+
+export function setPriceCacheEntry(tickerKey: string, entry: PriceCacheEntry): StorageOperationResult {
+  const cache = getPriceCache();
+  cache[tickerKey] = entry;
+  return savePriceCache(cache);
+}
+
+// ==========================================
+// SETTINGS
+// ==========================================
+export function getSettings(): AppSettings {
+  const defaultSettings: AppSettings = {
+    lastOpenedAt: new Date().toISOString(),
+    theme: 'Elegant Dark',
+    autoFetchPrices: true,
+  };
+  return getItem<AppSettings>(STORAGE_KEYS.SETTINGS, defaultSettings);
+}
+
+export function saveSettings(settings: Partial<AppSettings>): StorageOperationResult {
+  const current = getSettings();
+  const updated: AppSettings = {
+    ...current,
+    ...settings,
+    lastOpenedAt: new Date().toISOString(),
+  };
+  return setItem<AppSettings>(STORAGE_KEYS.SETTINGS, updated);
+}
+
+// ==========================================
+// SCHEMA MIGRATION RUNNER
+// ==========================================
+export function getSchemaVersion(): number {
+  return getItem<number>(STORAGE_KEYS.SCHEMA_VERSION, 0);
+}
+
+/**
+ * Migration runner: Checks schema version and executes pending data transformations.
+ */
+export function runMigrations(): StorageOperationResult {
+  try {
+    const storedVersion = getSchemaVersion();
+    
+    // Migration from version 0 (or fresh install) to version 1
+    if (storedVersion < 1) {
+      console.log(`[Greed Island Migrations] Migrating schema from version ${storedVersion} to ${CURRENT_SCHEMA_VERSION}`);
+
+      // Migrate legacy keys if they exist from Module 0 prototype
+      const legacyTrades = getItem<Trade[]>('gi_trades', []);
+      if (legacyTrades.length > 0 && getTrades().length === 0) {
+        saveTrades(legacyTrades);
+        localStorage.removeItem('gi_trades');
+      }
+
+      const legacyCash = getItem<CashEntry[]>('gi_cash_entries', []);
+      if (legacyCash.length > 0 && getCashEntries().length === 0) {
+        saveCashEntries(legacyCash);
+        localStorage.removeItem('gi_cash_entries');
+      }
+
+      // Mark schema version 1 as completed
+      setItem<number>(STORAGE_KEYS.SCHEMA_VERSION, CURRENT_SCHEMA_VERSION);
+    }
+
+    // Update lastOpenedAt setting on startup
+    saveSettings({ lastOpenedAt: new Date().toISOString() });
+
+    return { success: true };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error('[Greed Island Migrations] Migration failed:', errorMsg);
+    return { success: false, error: errorMsg };
+  }
+}
+
+// ==========================================
+// SANITY CHECKS SUITE
+// ==========================================
+/**
+ * Executes lightweight unit-style assertions on storage layer functionality.
+ * Verifies CRUD, precision preservation, and round-trip fidelity.
+ */
+export function runStorageSanityChecks(): { success: boolean; logs: string[] } {
+  const logs: string[] = [];
+  let success = true;
+
+  try {
+    logs.push('1. Testing Trade CRUD & numeric precision...');
+    const testTrade: Trade = {
+      id: 'sanity-test-trade-1',
+      date: '2026-08-08',
+      ticker: 'MSFT',
+      market: 'US',
+      broker: 'IBKR',
+      action: 'BUY',
+      quantity: 12.345, // 3 decimal places
+      price: 420.89,   // 2 decimal places
+      totalAmount: 5195.89,
+    };
+
+    const addTradeRes = addTrade(testTrade);
+    if (!addTradeRes.success) {
+      throw new Error(`addTrade failed: ${addTradeRes.error}`);
+    }
+
+    const fetchedTrades = getTrades();
+    const retrievedTrade = fetchedTrades.find((t) => t.id === testTrade.id);
+    if (!retrievedTrade) {
+      throw new Error('Test trade not found after addTrade');
+    }
+
+    if (
+      retrievedTrade.quantity !== 12.345 ||
+      retrievedTrade.price !== 420.89 ||
+      retrievedTrade.totalAmount !== 5195.89
+    ) {
+      throw new Error('Decimal precision mismatch after JSON round-trip!');
+    }
+    logs.push('✓ Trade CRUD and 3-decimal/2-decimal precision passed.');
+
+    // Cleanup test trade
+    deleteTrade(testTrade.id);
+
+    logs.push('2. Testing CashEntry CRUD...');
+    const testCash: CashEntry = {
+      id: 'sanity-test-cash-1',
+      date: '2026-08-08',
+      broker: 'FUTU',
+      action: 'IN',
+      amount: 10000.50,
+    };
+
+    const addCashRes = addCashEntry(testCash);
+    if (!addCashRes.success) {
+      throw new Error(`addCashEntry failed: ${addCashRes.error}`);
+    }
+
+    const fetchedCash = getCashEntries();
+    const retrievedCash = fetchedCash.find((c) => c.id === testCash.id);
+    if (!retrievedCash || retrievedCash.amount !== 10000.50) {
+      throw new Error('CashEntry retrieval or amount precision mismatch');
+    }
+    logs.push('✓ CashEntry CRUD passed.');
+
+    // Cleanup test cash
+    deleteCashEntry(testCash.id);
+
+    logs.push('3. Testing Schema Version & Migration runner...');
+    const version = getSchemaVersion();
+    if (version < 1) {
+      throw new Error(`Schema version is ${version}, expected >= 1`);
+    }
+    logs.push(`✓ Schema version verified (${version}).`);
+
+    logs.push('All storage sanity checks passed successfully!');
+  } catch (err) {
+    success = false;
+    const msg = err instanceof Error ? err.message : String(err);
+    logs.push(`✗ Sanity check failed: ${msg}`);
+  }
+
+  return { success, logs };
+}
+
+// Unified export for convenience
+export const storage = {
+  getTrades,
+  saveTrades,
+  addTrade,
+  updateTrade,
+  deleteTrade,
+  getCashEntries,
+  saveCashEntries,
+  addCashEntry,
+  updateCashEntry,
+  deleteCashEntry,
+  getOtherProducts,
+  saveOtherProducts,
+  addOtherProduct,
+  updateOtherProduct,
+  deleteOtherProduct,
+  getSnapshots,
+  saveSnapshots,
+  addSnapshot,
+  getPriceCache,
+  savePriceCache,
+  setPriceCacheEntry,
+  getSettings,
+  saveSettings,
+  getSchemaVersion,
+  runMigrations,
+  runStorageSanityChecks,
+};
