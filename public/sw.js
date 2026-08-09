@@ -1,5 +1,12 @@
 // Greed Island PWA Service Worker (Module 13)
-const CACHE_NAME = 'greed-island-v2';
+const CACHE_NAME = 'greed-island-v3';
+
+// Handle SKIP_WAITING message from client
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
 
 // Static app shell resources to pre-cache on SW install
 const PRECACHE_ASSETS = [
