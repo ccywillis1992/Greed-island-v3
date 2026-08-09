@@ -10,6 +10,7 @@ import {
   PlusCircle,
   Edit3,
   Trash2,
+  Copy,
   Calendar,
   DollarSign,
   Filter,
@@ -199,6 +200,22 @@ export const CashDetail: React.FC = () => {
     setFormError(null);
 
     // Scroll smoothly to form section
+    const formEl = document.getElementById('cash-entry-form-card');
+    if (formEl) {
+      formEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
+  // Duplicate entry handler
+  const handleDuplicateEntry = (entry: CashEntry) => {
+    setEditingId(null);
+    setDate(getTodayStr());
+    setBroker(entry.broker);
+    setAction(entry.action);
+    setAmount(entry.amount.toString());
+    setFormError(null);
+    showToast(`Duplicated ${entry.broker} ${entry.action} cash entry form. Click save to record.`, 'info');
+
     const formEl = document.getElementById('cash-entry-form-card');
     if (formEl) {
       formEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -666,21 +683,30 @@ export const CashDetail: React.FC = () => {
                       </span>
                     </div>
 
-                    {/* Edit and Delete Buttons (Requirement 5) */}
+                    {/* Edit, Duplicate, and Delete Buttons */}
                     <div className="flex items-center gap-1 border-l border-white/10 pl-2">
                       <button
                         id={`edit-cash-btn-${entry.id}`}
                         onClick={() => handleEditEntry(entry)}
-                        className="p-1 text-[#86868b] hover:text-[#007AFF] transition-colors rounded hover:bg-white/5"
+                        className="p-1.5 text-[#86868b] hover:text-[#007AFF] transition-colors rounded-lg hover:bg-white/5"
                         title="Edit cash entry"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
                       </button>
 
                       <button
+                        id={`duplicate-cash-btn-${entry.id}`}
+                        onClick={() => handleDuplicateEntry(entry)}
+                        className="p-1.5 text-[#86868b] hover:text-purple-400 transition-colors rounded-lg hover:bg-white/5"
+                        title="Duplicate cash entry"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+
+                      <button
                         id={`delete-cash-btn-${entry.id}`}
                         onClick={() => handleDeleteEntry(entry.id, entry.broker, entry.action, entry.amount)}
-                        className="p-1 text-[#86868b] hover:text-rose-400 transition-colors rounded hover:bg-white/5"
+                        className="p-1.5 text-[#86868b] hover:text-rose-400 transition-colors rounded-lg hover:bg-white/5"
                         title="Delete cash entry"
                       >
                         <Trash2 className="w-3.5 h-3.5" />

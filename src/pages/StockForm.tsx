@@ -9,6 +9,7 @@ import {
   PlusCircle,
   Edit3,
   Trash2,
+  Copy,
   Calendar,
   DollarSign,
   TrendingUp,
@@ -226,6 +227,22 @@ export const StockForm: React.FC = () => {
     setFormError(null);
 
     // Scroll to top form smoothly
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Duplicate Trade Record
+  const handleDuplicateTrade = (trade: Trade) => {
+    setEditingId(null);
+    setDate(getTodayStr());
+    setTicker(trade.ticker);
+    setMarket(trade.market);
+    setBroker(trade.broker);
+    setAction(trade.action);
+    setQuantity(trade.quantity.toString());
+    setPrice(trade.price.toString());
+    setTickerError(null);
+    setFormError(null);
+    showToast(`Duplicated ${trade.ticker} trade form. Click save to record.`, 'info');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -605,21 +622,30 @@ export const StockForm: React.FC = () => {
                         {formatUSD(trade.totalAmount)}
                       </span>
 
-                      {/* Controls (✏ Edit, 🗑 Delete) (Requirement 5) */}
+                      {/* Controls (✏ Edit, 📄 Duplicate, 🗑 Delete) */}
                       <div className="flex items-center gap-1 border-l border-white/10 pl-2">
                         <button
                           id={`edit-trade-btn-${trade.id}`}
                           onClick={() => handleEditTrade(trade)}
-                          className="p-1 text-[#86868b] hover:text-[#007AFF] transition-colors rounded hover:bg-white/5"
+                          className="p-1.5 text-[#86868b] hover:text-[#007AFF] transition-colors rounded-lg hover:bg-white/5"
                           title="Edit trade record"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
                         </button>
 
                         <button
+                          id={`duplicate-trade-btn-${trade.id}`}
+                          onClick={() => handleDuplicateTrade(trade)}
+                          className="p-1.5 text-[#86868b] hover:text-purple-400 transition-colors rounded-lg hover:bg-white/5"
+                          title="Duplicate trade record"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
                           id={`delete-trade-btn-${trade.id}`}
                           onClick={() => handleDeleteTrade(trade.id, trade.ticker)}
-                          className="p-1 text-[#86868b] hover:text-rose-400 transition-colors rounded hover:bg-white/5"
+                          className="p-1.5 text-[#86868b] hover:text-rose-400 transition-colors rounded-lg hover:bg-white/5"
                           title="Delete trade record"
                         >
                           <Trash2 className="w-3.5 h-3.5" />

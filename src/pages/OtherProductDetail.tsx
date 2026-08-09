@@ -9,6 +9,7 @@ import {
   PlusCircle,
   Edit3,
   Trash2,
+  Copy,
   Calendar,
   DollarSign,
   TrendingUp,
@@ -121,6 +122,22 @@ export const OtherProductDetail: React.FC = () => {
     setFormError(null);
 
     // Scroll to form card
+    const el = document.getElementById('other-product-form-card');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
+  // Duplicate record handler
+  const handleDuplicateRecord = (record: OtherProductRecord) => {
+    setEditingId(null);
+    setAsOfDate(getTodayStr());
+    setTotalAmount(record.totalAmount.toString());
+    setUnrealizedGainLoss(record.unrealizedGainLoss.toString());
+    setPerformancePct(record.performancePct.toString());
+    setFormError(null);
+    showToast(`Duplicated valuation record form. Click save to record.`, 'info');
+
     const el = document.getElementById('other-product-form-card');
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -678,21 +695,30 @@ export const OtherProductDetail: React.FC = () => {
                     </span>
                   </div>
 
-                  {/* Actions (Edit / Delete) */}
+                  {/* Actions (Edit / Duplicate / Delete) */}
                   <div className="flex items-center gap-1 border-l border-white/10 pl-2">
                     <button
                       id={`edit-other-btn-${record.id}`}
                       onClick={() => handlePrepareUpdate(record)}
-                      className="p-1 text-[#86868b] hover:text-[#007AFF] transition-colors rounded hover:bg-white/5"
+                      className="p-1.5 text-[#86868b] hover:text-[#007AFF] transition-colors rounded-lg hover:bg-white/5"
                       title="Edit historical record"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
 
                     <button
+                      id={`duplicate-other-btn-${record.id}`}
+                      onClick={() => handleDuplicateRecord(record)}
+                      className="p-1.5 text-[#86868b] hover:text-purple-400 transition-colors rounded-lg hover:bg-white/5"
+                      title="Duplicate historical record"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
                       id={`delete-other-btn-${record.id}`}
                       onClick={() => handleDelete(record.id, record.asOfDate)}
-                      className="p-1 text-[#86868b] hover:text-rose-400 transition-colors rounded hover:bg-white/5"
+                      className="p-1.5 text-[#86868b] hover:text-rose-400 transition-colors rounded-lg hover:bg-white/5"
                       title="Delete historical record"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
