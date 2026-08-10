@@ -339,9 +339,12 @@ export const Summary: React.FC = () => {
             title="Toggle Filters"
             aria-label="Toggle Filters"
           >
-            <Filter className="w-4 h-4 text-[#007AFF]" />
+            <Filter className="w-4 h-4 text-[#007AFF] shrink-0" />
+            <span className="text-xs font-semibold text-[#f5f5f7] whitespace-nowrap">
+              Market and Broker Filter
+            </span>
             {(selectedMarket !== 'ALL' || selectedBroker !== 'ALL') && (
-              <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] shrink-0" />
             )}
           </button>
 

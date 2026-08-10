@@ -1,19 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { storage, STORAGE_ERROR_EVENT } from '../lib/storage';
 import { computeCashTotal } from '../lib/calc';
-import { CashEntry, Broker, BrokerFilter, CashAction } from '../types';
+import { CashEntry, Broker, CashAction } from '../types';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
+import { DateInput } from '../components/DateInput';
 import {
   Wallet,
   PlusCircle,
   Edit3,
   Trash2,
   Copy,
-  Calendar,
   DollarSign,
-  Filter,
   X,
   ShieldAlert,
   CheckCircle2,
@@ -22,20 +20,13 @@ import {
   Search,
   ArrowDownLeft,
   ArrowUpRight,
-  Building2,
   Coins,
-  ArrowRightLeft,
   Landmark,
 } from 'lucide-react';
 
 export const CashDetail: React.FC = () => {
-  const navigate = useNavigate();
-
   // Today's date helper (YYYY-MM-DD)
   const getTodayStr = () => new Date().toISOString().split('T')[0];
-
-  // Section 1 State: Broker Filter (ALL, FUTU, IBKR, HSBC, Binance)
-  const [selectedBroker, setSelectedBroker] = useState<BrokerFilter>('ALL');
 
   // Section 2 State: Form Fields
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -76,10 +67,10 @@ export const CashDetail: React.FC = () => {
     });
   }, [storageVersion]);
 
-  // Total cash calculation for selected broker filter
+  // Total cash calculation across all brokers
   const totalCash = useMemo(() => {
-    return computeCashTotal(cashEntries, selectedBroker);
-  }, [cashEntries, selectedBroker]);
+    return computeCashTotal(cashEntries, 'ALL');
+  }, [cashEntries]);
 
   // Cash stats breakdown
   const stats = useMemo(() => {
@@ -87,9 +78,6 @@ export const CashDetail: React.FC = () => {
     let totalOut = 0;
 
     for (const entry of cashEntries) {
-      if (selectedBroker !== 'ALL' && entry.broker !== selectedBroker) {
-        continue;
-      }
       const val = Number(entry.amount) || 0;
       if (entry.action === 'IN') {
         totalIn += val;
@@ -102,7 +90,7 @@ export const CashDetail: React.FC = () => {
       totalIn: Math.round(totalIn * 100) / 100,
       totalOut: Math.round(totalOut * 100) / 100,
     };
-  }, [cashEntries, selectedBroker]);
+  }, [cashEntries]);
 
   // Per-broker cash balances map
   const brokerBalances = useMemo(() => {
@@ -122,18 +110,16 @@ export const CashDetail: React.FC = () => {
 
   // Filtered entries for Section 3 bottom list
   const filteredEntries = useMemo(() => {
-    return cashEntries.filter((entry) => {
-      const matchBroker = selectedBroker === 'ALL' || entry.broker === selectedBroker;
-      const matchQuery =
-        !searchQuery.trim() ||
-        entry.broker.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
-        entry.action.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
-        entry.date.includes(searchQuery.trim()) ||
-        entry.amount.toString().includes(searchQuery.trim());
-
-      return matchBroker && matchQuery;
-    });
-  }, [cashEntries, selectedBroker, searchQuery]);
+    if (!searchQuery.trim()) return cashEntries;
+    const query = searchQuery.trim().toLowerCase();
+    return cashEntries.filter(
+      (entry) =>
+        entry.broker.toLowerCase().includes(query) ||
+        entry.action.toLowerCase().includes(query) ||
+        entry.date.includes(query) ||
+        entry.amount.toString().includes(query)
+    );
+  }, [cashEntries, searchQuery]);
 
   // Form Reset
   const resetForm = () => {
@@ -309,30 +295,11 @@ export const CashDetail: React.FC = () => {
       )}
 
       {/* HEADER */}
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-white/5">
-        <div className="space-y-0.5">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold tracking-tight text-[#f5f5f7]">Broker Cash Balance</h1>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              Module 9
-            </span>
-          </div>
-          <p className="text-xs text-[#86868b]">
-            Track liquid cash available across brokers for purchasing securities
-          </p>
-        </div>
-
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => navigate('/')}
-          className="text-xs gap-1 self-start sm:self-auto"
-        >
-          <span>Back to Summary</span>
-        </Button>
+      <header className="pb-3 border-b border-white/5">
+        <h1 className="text-xl font-bold tracking-tight text-[#f5f5f7]">Broker Cash Balance</h1>
       </header>
 
-      {/* SECTION 1 (TOP): TOTAL CASH SUM WITH BROKER FILTER (Requirement 1 & 3) */}
+      {/* SECTION 1 (TOP): TOTAL CASH SUM */}
       <section id="cash-summary-section" className="space-y-3">
         {/* Total Cash Hero Banner */}
         <Card className="p-5 bg-[#121214] border-white/10 space-y-4 shadow-xl">
@@ -343,11 +310,6 @@ export const CashDetail: React.FC = () => {
                 <span className="font-semibold uppercase tracking-wider text-[10px]">
                   Total Cash Available (Buying Power)
                 </span>
-                {selectedBroker !== 'ALL' && (
-                  <span className="text-[10px] text-amber-400 font-mono">
-                    [{selectedBroker}]
-                  </span>
-                )}
               </div>
               <div className="text-2xl sm:text-3xl font-extrabold font-mono text-white tracking-tight">
                 {formatUSD(totalCash)}
@@ -368,52 +330,15 @@ export const CashDetail: React.FC = () => {
             </div>
           </div>
 
-          {/* Broker Filter Chips (ALL / FUTU / IBKR / HSBC / Binance) (Requirement 1 & 3) */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase font-semibold text-[#86868b] tracking-wider">
-                Filter by Broker Account
-              </span>
-              <span className="text-[10px] text-[#86868b] font-mono">
-                {selectedBroker === 'ALL'
-                  ? 'Showing consolidated cash across all brokers'
-                  : `Viewing cash balance specifically for ${selectedBroker}`}
-              </span>
-            </div>
-
-            <div className="flex flex-wrap gap-1.5">
-              {(['ALL', 'FUTU', 'IBKR', 'HSBC', 'Binance'] as BrokerFilter[]).map((b) => (
-                <button
-                  key={b}
-                  id={`cash-broker-filter-${b.toLowerCase()}`}
-                  onClick={() => setSelectedBroker(b)}
-                  className={`px-3 py-1.5 text-xs rounded-xl font-medium transition-all ${
-                    selectedBroker === b
-                      ? 'bg-emerald-500 text-white font-bold shadow-md'
-                      : 'bg-[#1c1c1e] text-[#86868b] hover:text-[#f5f5f7] hover:bg-[#2c2c2e] border border-white/5'
-                  }`}
-                >
-                  {b === 'ALL' ? 'ALL Brokers' : b}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Per-Broker Cash Breakdown Cards Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-white/5">
+          {/* Per-Broker Cash Breakdown Cards Grid (Always On) */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
             {(['IBKR', 'FUTU', 'HSBC', 'Binance'] as Broker[]).map((b) => {
               const bal = brokerBalances[b];
-              const isSelected = selectedBroker === b;
 
               return (
                 <div
                   key={b}
-                  onClick={() => setSelectedBroker(b)}
-                  className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
-                    isSelected
-                      ? 'bg-emerald-500/10 border-emerald-500/40'
-                      : 'bg-[#1c1c1e] border-white/5 hover:border-white/15'
-                  }`}
+                  className="p-2.5 rounded-xl bg-[#1c1c1e] border border-white/5 hover:border-white/15 transition-all"
                 >
                   <div className="flex items-center justify-between text-[10px] text-[#86868b]">
                     <span className="font-semibold text-white">{b}</span>
@@ -466,10 +391,10 @@ export const CashDetail: React.FC = () => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Action Toggle (IN vs OUT) */}
+          {/* Action Toggle (Deposit vs Withdraw) */}
           <div className="space-y-1.5">
             <label className="text-[10px] uppercase font-semibold text-[#86868b] tracking-wider block">
-              Action (Cash Flow Type)
+              Action
             </label>
             <div className="grid grid-cols-2 gap-2 bg-[#1c1c1e] p-1 rounded-xl border border-white/5">
               <button
@@ -483,7 +408,7 @@ export const CashDetail: React.FC = () => {
                 }`}
               >
                 <ArrowDownLeft className="w-4 h-4" />
-                <span>IN (Deposit / Transfer In)</span>
+                <span>Deposit</span>
               </button>
 
               <button
@@ -497,7 +422,7 @@ export const CashDetail: React.FC = () => {
                 }`}
               >
                 <ArrowUpRight className="w-4 h-4" />
-                <span>OUT (Withdrawal / Transfer Out)</span>
+                <span>Withdraw</span>
               </button>
             </div>
           </div>
@@ -509,16 +434,12 @@ export const CashDetail: React.FC = () => {
               <label className="text-[10px] uppercase font-semibold text-[#86868b] tracking-wider block">
                 Date
               </label>
-              <div className="relative">
-                <Calendar className="w-3.5 h-3.5 text-[#86868b] absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="w-full bg-[#1c1c1e] border border-white/10 rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
-                  required
-                />
-              </div>
+              <DateInput
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                required
+                focusColorClass="focus:border-emerald-500"
+              />
             </div>
 
             {/* Broker Dropdown (FUTU / IBKR / HSBC / Binance) */}
@@ -655,7 +576,7 @@ export const CashDetail: React.FC = () => {
                         }`}
                       >
                         {isIn ? <ArrowDownLeft className="w-3 h-3" /> : <ArrowUpRight className="w-3 h-3" />}
-                        <span>{entry.action}</span>
+                        <span>{isIn ? 'Deposit' : 'Withdraw'}</span>
                       </span>
 
                       {/* Broker Name */}

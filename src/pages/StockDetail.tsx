@@ -309,19 +309,9 @@ export const StockDetail: React.FC = () => {
           >
             <ArrowLeft className="w-4 h-4" />
           </Link>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold tracking-tight text-[#f5f5f7]">
-                Stock Holdings
-              </h1>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-[#007AFF]/10 text-[#007AFF] border border-[#007AFF]/20">
-                Module 7
-              </span>
-            </div>
-            <p className="text-xs text-[#86868b]">
-              Real-time portfolio position view & manual price retries
-            </p>
-          </div>
+          <h1 className="text-xl font-bold tracking-tight text-[#f5f5f7]">
+            Stock Holdings
+          </h1>
         </div>
 
         <div className="flex items-center gap-2">

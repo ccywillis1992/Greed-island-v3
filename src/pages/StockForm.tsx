@@ -1,30 +1,25 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { storage, STORAGE_ERROR_EVENT } from '../lib/storage';
-import { refreshPrice } from '../lib/priceApi';
+import { refreshPrice, getUsdHkdRate, convertHkdToUsd } from '../lib/priceApi';
 import { Trade, Broker, Market, Action } from '../types';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
+import { DateInput } from '../components/DateInput';
 import {
   PlusCircle,
   Edit3,
   Trash2,
-  Copy,
-  Calendar,
-  DollarSign,
-  TrendingUp,
   ArrowRightLeft,
   CheckCircle2,
   XCircle,
   Sparkles,
   Search,
-  Filter,
   X,
   ShieldAlert,
   ArrowUpRight,
   ArrowDownRight,
-  Layers,
-  Building2,
+  ArrowLeft,
 } from 'lucide-react';
 
 export const StockForm: React.FC = () => {
@@ -43,6 +38,9 @@ export const StockForm: React.FC = () => {
   const [quantity, setQuantity] = useState<string>('');
   const [price, setPrice] = useState<string>('');
 
+  // FX Rate State (HKD per USD)
+  const [usdHkdRate, setUsdHkdRate] = useState<number>(7.81);
+
   // Validation & Error States
   const [tickerError, setTickerError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -51,6 +49,11 @@ export const StockForm: React.FC = () => {
   const [storageVersion, setStorageVersion] = useState<number>(0);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [tradesSearch, setTradesSearch] = useState<string>('');
+
+  // Fetch live FX rate on mount
+  useEffect(() => {
+    getUsdHkdRate().then((rate) => setUsdHkdRate(rate));
+  }, []);
 
   // Listen to storage error events
   useEffect(() => {
@@ -91,13 +94,16 @@ export const StockForm: React.FC = () => {
     );
   }, [trades, tradesSearch]);
 
-  // Auto-calculate Total Amount (Quantity * Price)
+  // Auto-calculate Total Amount in USD
   const computedTotal = useMemo(() => {
     const q = parseFloat(quantity);
     const p = parseFloat(price);
     if (isNaN(q) || isNaN(p) || q <= 0 || p <= 0) return 0;
-    return Math.round(q * p * 100) / 100;
-  }, [quantity, price]);
+
+    // If market is HK, price is entered in HKD, so convert to USD for Total Amount
+    const priceUsd = market === 'HK' ? p / usdHkdRate : p;
+    return Math.round(q * priceUsd * 100) / 100;
+  }, [quantity, price, market, usdHkdRate]);
 
   // Smart Market Suggestion based on Ticker Input
   const handleTickerChange = (raw: string) => {
@@ -116,13 +122,12 @@ export const StockForm: React.FC = () => {
     }
   };
 
-  // Basic Ticker Sanity Validation (Requirement 3)
+  // Basic Ticker Sanity Validation
   const validateTicker = (value: string): boolean => {
     if (!value.trim()) {
       setTickerError('Ticker symbol cannot be empty.');
       return false;
     }
-    // Reject illegal characters like spaces, special quotes, emojis
     const validPattern = /^[A-Z0-9.\-]+$/i;
     if (!validPattern.test(value.trim())) {
       setTickerError('Invalid ticker. Only letters, numbers, dots (.), and hyphens (-) allowed.');
@@ -173,7 +178,15 @@ export const StockForm: React.FC = () => {
       return;
     }
 
-    const totalAmount = Math.round(parsedQty * parsedPrice * 100) / 100;
+    // Convert HKD price to USD if market === 'HK'
+    let finalPriceUsd = parsedPrice;
+    if (market === 'HK') {
+      finalPriceUsd = await convertHkdToUsd(parsedPrice);
+    } else {
+      finalPriceUsd = Math.round(parsedPrice * 100) / 100;
+    }
+
+    const totalAmount = Math.round(parsedQty * finalPriceUsd * 100) / 100;
 
     const tradeData: Trade = {
       id: editingId || `trade-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -183,7 +196,7 @@ export const StockForm: React.FC = () => {
       broker,
       action,
       quantity: Math.round(parsedQty * 1000) / 1000, // 3 decimals
-      price: Math.round(parsedPrice * 100) / 100,     // 2 decimals
+      price: finalPriceUsd,                           // Always USD stored
       totalAmount,
     };
 
@@ -213,7 +226,7 @@ export const StockForm: React.FC = () => {
     resetForm();
   };
 
-  // Populate Form for Editing (Requirement 5)
+  // Populate Form for Editing
   const handleEditTrade = (trade: Trade) => {
     setEditingId(trade.id);
     setDate(trade.date);
@@ -222,7 +235,15 @@ export const StockForm: React.FC = () => {
     setBroker(trade.broker);
     setAction(trade.action);
     setQuantity(trade.quantity.toString());
-    setPrice(trade.price.toString());
+
+    // If market is HK, display price in HKD
+    if (trade.market === 'HK') {
+      const hkdPrice = Math.round(trade.price * usdHkdRate * 100) / 100;
+      setPrice(hkdPrice.toString());
+    } else {
+      setPrice(trade.price.toString());
+    }
+
     setTickerError(null);
     setFormError(null);
 
@@ -230,23 +251,7 @@ export const StockForm: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Duplicate Trade Record
-  const handleDuplicateTrade = (trade: Trade) => {
-    setEditingId(null);
-    setDate(getTodayStr());
-    setTicker(trade.ticker);
-    setMarket(trade.market);
-    setBroker(trade.broker);
-    setAction(trade.action);
-    setQuantity(trade.quantity.toString());
-    setPrice(trade.price.toString());
-    setTickerError(null);
-    setFormError(null);
-    showToast(`Duplicated ${trade.ticker} trade form. Click save to record.`, 'info');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  // Delete Trade (Requirement 5)
+  // Delete Trade
   const handleDeleteTrade = (id: string, tickerName: string) => {
     const res = storage.deleteTrade(id);
     if (res.success) {
@@ -285,30 +290,19 @@ export const StockForm: React.FC = () => {
 
       {/* HEADER */}
       <header className="flex items-center justify-between pb-3 border-b border-white/5">
-        <div className="space-y-0.5">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold tracking-tight text-[#f5f5f7]">Stock Trade Form</h1>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-[#007AFF]/10 text-[#007AFF] border border-[#007AFF]/20">
-              Module 8
-            </span>
-          </div>
-          <p className="text-xs text-[#86868b]">
-            Record buys & sells to update positions and downstream portfolio numbers
-          </p>
+        <div className="flex items-center gap-2.5">
+          <Link
+            to="/stocks"
+            className="p-2 text-[#86868b] hover:text-white bg-[#1c1c1e] hover:bg-[#2c2c2e] rounded-xl border border-white/5 transition-colors"
+            title="Back to Stock Holdings"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </Link>
+          <h1 className="text-xl font-bold tracking-tight text-[#f5f5f7]">Stock Trade Form</h1>
         </div>
-
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => navigate('/stocks')}
-          className="text-xs gap-1"
-        >
-          <span>View Holdings</span>
-          <ArrowUpRight className="w-3.5 h-3.5" />
-        </Button>
       </header>
 
-      {/* SECTION 1: TOP NEW / EDIT TRADE ENTRY FORM (Requirement 1 & 2) */}
+      {/* SECTION 1: TOP NEW / EDIT TRADE ENTRY FORM */}
       <Card
         id="trade-form-card"
         className="p-5 bg-[#121214] border-white/10 space-y-4 shadow-xl"
@@ -388,19 +382,14 @@ export const StockForm: React.FC = () => {
               <label className="text-[10px] uppercase font-semibold text-[#86868b] tracking-wider block">
                 Trade Date
               </label>
-              <div className="relative">
-                <Calendar className="w-3.5 h-3.5 text-[#86868b] absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="w-full bg-[#1c1c1e] border border-white/10 rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-[#007AFF] font-mono"
-                  required
-                />
-              </div>
+              <DateInput
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                required
+              />
             </div>
 
-            {/* Ticker Field with Sanity Check (Requirement 3) */}
+            {/* Ticker Field */}
             <div className="space-y-1">
               <label className="text-[10px] uppercase font-semibold text-[#86868b] tracking-wider block">
                 Ticker Symbol
@@ -443,7 +432,7 @@ export const StockForm: React.FC = () => {
               </select>
             </div>
 
-            {/* Broker Dropdown (FUTU / IBKR / HSBC / Binance) */}
+            {/* Broker Dropdown */}
             <div className="space-y-1">
               <label className="text-[10px] uppercase font-semibold text-[#86868b] tracking-wider block">
                 Broker
@@ -480,10 +469,10 @@ export const StockForm: React.FC = () => {
               />
             </div>
 
-            {/* Price (USD) */}
+            {/* Price (USD or HKD) */}
             <div className="space-y-1">
               <label className="text-[10px] uppercase font-semibold text-[#86868b] tracking-wider block">
-                Price per Unit (USD)
+                {market === 'HK' ? 'PRICE PER UNIT (HKD)' : 'PRICE PER UNIT (USD)'}
               </label>
               <input
                 type="number"
@@ -491,20 +480,22 @@ export const StockForm: React.FC = () => {
                 min="0.01"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
-                placeholder="e.g. 420.50"
+                placeholder={market === 'HK' ? 'e.g. 25.50' : 'e.g. 420.50'}
                 className="w-full bg-[#1c1c1e] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#007AFF] font-mono"
                 required
               />
             </div>
 
-            {/* Total Amount (Auto-Calculated ReadOnly) */}
+            {/* Total Amount (Auto-Calculated ReadOnly USD) */}
             <div className="space-y-1">
               <label className="text-[10px] uppercase font-semibold text-[#86868b] tracking-wider block">
                 Total Amount (Auto USD)
               </label>
               <div className="w-full bg-[#18181a] border border-white/5 rounded-xl px-3 py-2 text-xs text-white font-mono font-bold flex items-center justify-between text-[#007AFF]">
                 <span>{formatUSD(computedTotal)}</span>
-                <span className="text-[9px] text-[#86868b] font-normal uppercase">Price × Qty</span>
+                <span className="text-[9px] text-[#86868b] font-normal uppercase">
+                  {market === 'HK' ? 'HKD Converted → USD' : 'Price × Qty'}
+                </span>
               </div>
             </div>
           </div>
@@ -531,7 +522,7 @@ export const StockForm: React.FC = () => {
         </form>
       </Card>
 
-      {/* SECTION 2: BOTTOM LIST OF PAST TRADES (Requirement 1 & 5) */}
+      {/* SECTION 2: BOTTOM LIST OF PAST TRADES */}
       <section id="past-trades-list-section" className="space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1 border-b border-white/5">
           <div className="flex items-center gap-2">
@@ -575,7 +566,7 @@ export const StockForm: React.FC = () => {
                 <Card
                   key={trade.id}
                   id={`trade-row-${trade.id}`}
-                  className="p-3.5 bg-[#121214] border-white/5 hover:border-white/15 transition-all space-y-2 font-mono text-xs"
+                  className="p-3 bg-[#121214] border-white/5 hover:border-white/15 transition-all space-y-2 font-mono text-xs"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
@@ -607,45 +598,36 @@ export const StockForm: React.FC = () => {
                   </div>
 
                   {/* Quantity, Price & Total Row */}
-                  <div className="flex items-center justify-between text-xs pt-1 border-t border-white/5">
-                    <div className="space-x-3">
-                      <span className="text-[#86868b]">
+                  <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-white/5 whitespace-nowrap gap-2">
+                    <div className="flex items-center gap-3 text-[#86868b]">
+                      <span>
                         Qty: <strong className="text-white">{trade.quantity}</strong>
                       </span>
-                      <span className="text-[#86868b]">
+                      <span>
                         Price: <strong className="text-white">${trade.price.toFixed(2)}</strong>
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-3">
-                      <span className="text-white font-bold">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-white font-bold text-xs">
                         {formatUSD(trade.totalAmount)}
                       </span>
 
-                      {/* Controls (✏ Edit, 📄 Duplicate, 🗑 Delete) */}
+                      {/* Controls (✏ Edit, 🗑 Delete) */}
                       <div className="flex items-center gap-1 border-l border-white/10 pl-2">
                         <button
                           id={`edit-trade-btn-${trade.id}`}
                           onClick={() => handleEditTrade(trade)}
-                          className="p-1.5 text-[#86868b] hover:text-[#007AFF] transition-colors rounded-lg hover:bg-white/5"
+                          className="p-1 text-[#86868b] hover:text-[#007AFF] transition-colors rounded-lg hover:bg-white/5"
                           title="Edit trade record"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
                         </button>
 
                         <button
-                          id={`duplicate-trade-btn-${trade.id}`}
-                          onClick={() => handleDuplicateTrade(trade)}
-                          className="p-1.5 text-[#86868b] hover:text-purple-400 transition-colors rounded-lg hover:bg-white/5"
-                          title="Duplicate trade record"
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                        </button>
-
-                        <button
                           id={`delete-trade-btn-${trade.id}`}
                           onClick={() => handleDeleteTrade(trade.id, trade.ticker)}
-                          className="p-1.5 text-[#86868b] hover:text-rose-400 transition-colors rounded-lg hover:bg-white/5"
+                          className="p-1 text-[#86868b] hover:text-rose-400 transition-colors rounded-lg hover:bg-white/5"
                           title="Delete trade record"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -662,3 +644,4 @@ export const StockForm: React.FC = () => {
     </div>
   );
 };
+

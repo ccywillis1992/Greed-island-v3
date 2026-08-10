@@ -5,7 +5,7 @@ import { LayoutDashboard, PlusCircle, Wallet, Layers, Clock } from 'lucide-react
 export const Navigation: React.FC = () => {
   const navItems = [
     { to: '/', label: 'Summary', icon: LayoutDashboard },
-    { to: '/stock-form', label: 'Trade', icon: PlusCircle },
+    { to: '/stocks', label: 'Trade', icon: PlusCircle },
     { to: '/cash', label: 'Cash', icon: Wallet },
     { to: '/other', label: 'Other', icon: Layers },
     { to: '/history', label: 'History', icon: Clock },

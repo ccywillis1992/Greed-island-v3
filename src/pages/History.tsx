@@ -28,6 +28,7 @@ import {
   TrendingUp,
   FileSpreadsheet,
 } from 'lucide-react';
+import { DateInput } from '../components/DateInput';
 
 export const History: React.FC = () => {
   const [snapshots, setSnapshots] = useState<DailySnapshot[]>([]);
@@ -147,10 +148,7 @@ export const History: React.FC = () => {
       {/* Header */}
       <header className="flex items-center justify-between pb-3 border-b border-white/5">
         <div>
-          <h1 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#86868b]">
-            Module 5 Engine
-          </h1>
-          <span className="text-xl font-medium tracking-tight text-[#f5f5f7]">Snapshot History</span>
+          <h1 className="text-xl font-bold tracking-tight text-[#f5f5f7]">Snapshot History</h1>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -250,11 +248,9 @@ export const History: React.FC = () => {
               <label className="text-[10px] font-medium uppercase text-[#86868b] block mb-1">
                 Trading Bucket Date
               </label>
-              <input
-                type="date"
+              <DateInput
                 value={newDate}
                 onChange={(e) => setNewDate(e.target.value)}
-                className="w-full bg-[#2c2c2e] border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#007AFF]"
                 required
               />
             </div>

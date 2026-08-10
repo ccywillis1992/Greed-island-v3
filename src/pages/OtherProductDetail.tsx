@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { storage, STORAGE_ERROR_EVENT } from '../lib/storage';
 import { OtherProductRecord } from '../types';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
+import { DateInput } from '../components/DateInput';
 import {
   Layers,
   PlusCircle,
@@ -27,8 +27,6 @@ import {
 } from 'lucide-react';
 
 export const OtherProductDetail: React.FC = () => {
-  const navigate = useNavigate();
-
   // Helper for today's ISO date string YYYY-MM-DD
   const getTodayStr = () => new Date().toISOString().split('T')[0];
 
@@ -319,27 +317,8 @@ export const OtherProductDetail: React.FC = () => {
       )}
 
       {/* HEADER */}
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-white/5">
-        <div className="space-y-0.5">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold tracking-tight text-[#f5f5f7]">Other Product Portfolio</h1>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20">
-              Module 10
-            </span>
-          </div>
-          <p className="text-xs text-[#86868b]">
-            Manual tracking for bonds, private funds, and unquoted securities
-          </p>
-        </div>
-
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => navigate('/')}
-          className="text-xs gap-1 self-start sm:self-auto"
-        >
-          <span>Back to Summary</span>
-        </Button>
+      <header className="pb-3 border-b border-white/5">
+        <h1 className="text-xl font-bold tracking-tight text-[#f5f5f7]">Other Product Portfolio</h1>
       </header>
 
       {/* SECTION 1 (TOP): LATEST RECORD ONLY SUMMARY CARD (Requirement 1, 2, 3 & 5) */}
@@ -515,16 +494,12 @@ export const OtherProductDetail: React.FC = () => {
               <label className="text-[10px] uppercase font-semibold text-[#86868b] tracking-wider block">
                 As Of Date
               </label>
-              <div className="relative">
-                <Calendar className="w-3.5 h-3.5 text-[#86868b] absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="date"
-                  value={asOfDate}
-                  onChange={(e) => setAsOfDate(e.target.value)}
-                  className="w-full bg-[#1c1c1e] border border-white/10 rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500 font-mono"
-                  required
-                />
-              </div>
+              <DateInput
+                value={asOfDate}
+                onChange={(e) => setAsOfDate(e.target.value)}
+                required
+                focusColorClass="focus:border-purple-500"
+              />
             </div>
 
             {/* Field 2: Total Amount (USD) */}
