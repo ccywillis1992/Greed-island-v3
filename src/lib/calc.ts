@@ -235,29 +235,35 @@ export function computeSummaryNumbers(
 
   // Other products (Market "OTHER"): Include only if market filter allows
   let otherProductsVal = 0;
+  let otherUnrealizedGL = 0;
   if (marketFilter === 'ALL' || marketFilter === 'OTHER') {
     const latestOther = otherProducts.filter((o) => o.isLatest);
     if (latestOther.length > 0) {
       otherProductsVal = latestOther.reduce((acc, o) => acc + (Number(o.totalAmount) || 0), 0);
+      otherUnrealizedGL = latestOther.reduce((acc, o) => acc + (Number(o.unrealizedGainLoss) || 0), 0);
     } else if (otherProducts.length > 0) {
       // Fallback to last record if isLatest not explicitly flagged
       const sorted = [...otherProducts].sort(
         (a, b) => new Date(b.asOfDate).getTime() - new Date(a.asOfDate).getTime()
       );
       otherProductsVal = Number(sorted[0].totalAmount) || 0;
+      otherUnrealizedGL = Number(sorted[0].unrealizedGainLoss) || 0;
     }
   }
 
   // Number A = sum(current values of positions) + sum(other product total amounts)
   const numberA = Math.round((posCurrentValueSum + otherProductsVal) * 100) / 100;
 
-  // Number B = sum(current values) - sum(total costs) [Excludes Other Product per PRD]
-  const numberB = Math.round((posCurrentValueSum - posTotalCostSum) * 100) / 100;
+  // Number B = (sum of position current values - sum of position total costs) + (latest Other Product record's unrealizedGainLoss, or 0 if no Other Product record exists)
+  const numberB = Math.round((posCurrentValueSum - posTotalCostSum + otherUnrealizedGL) * 100) / 100;
 
-  // Number C = (sum current values - sum total costs) / sum total costs * 100
+  // Number C = (Total Unrealized Gain / Total Product Cost) * 100
+  // Cost of Other product = Total amount - unrealized gain
+  const otherCost = otherProductsVal - otherUnrealizedGL;
+  const totalProductCost = posTotalCostSum + otherCost;
   const numberC =
-    posTotalCostSum > 0
-      ? Math.round(((posCurrentValueSum - posTotalCostSum) / posTotalCostSum) * 10000) / 100
+    totalProductCost > 0
+      ? Math.round((numberB / totalProductCost) * 10000) / 100
       : 0;
 
   // Number D = Number A + Net Cash
@@ -552,17 +558,17 @@ export function runCalcSanitySuite(): {
     success = false;
   }
 
-  if (summary.numberB === 1050) {
-    logs.push('✓ Number B (Stock Unrealized Gain) matches expected +$1,050.00');
+  if (summary.numberB === 1550) {
+    logs.push('✓ Number B (Total Unrealized Gain) matches expected +$1,550.00 ($1,050 stock + $500 other product)');
   } else {
-    logs.push(`✗ Number B mismatch: expected +$1,050.00, got $${summary.numberB}`);
+    logs.push(`✗ Number B mismatch: expected +$1,550.00, got $${summary.numberB}`);
     success = false;
   }
 
-  if (Math.abs(summary.numberC - 17.5) < 0.01) {
-    logs.push('✓ Number C (Stock Return %) matches expected +17.50%');
+  if (Math.abs(summary.numberC - 14.76) < 0.01) {
+    logs.push('✓ Number C (Total Product Return %) matches expected +14.76% ($1,550 gain / $10,500 cost)');
   } else {
-    logs.push(`✗ Number C mismatch: expected +17.50%, got ${summary.numberC}%`);
+    logs.push(`✗ Number C mismatch: expected +14.76%, got ${summary.numberC}%`);
     success = false;
   }
 

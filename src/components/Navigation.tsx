@@ -12,7 +12,11 @@ export const Navigation: React.FC = () => {
   ];
 
   return (
-    <nav id="bottom-navigation" className="fixed bottom-0 left-0 right-0 z-50 bg-[#0a0a0a]/90 backdrop-blur-md border-t border-white/10 px-4 py-2">
+    <nav
+      id="bottom-navigation"
+      className="fixed bottom-0 left-0 right-0 z-50 bg-[#0a0a0a]/90 backdrop-blur-md border-t border-white/10 px-4 py-2"
+      style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom, 0.5rem))' }}
+    >
       <div className="max-w-md mx-auto flex items-center justify-around">
         {navItems.map((item) => {
           const Icon = item.icon;
