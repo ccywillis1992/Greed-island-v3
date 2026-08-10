@@ -28,10 +28,11 @@ export interface CashEntry {
 export interface OtherProductRecord {
   id: string;
   asOfDate: string;
+  productType: string;          // free text or preset label, e.g. "Mutual Funds", "Bonds"
   unrealizedGainLoss: number;   // USD, 2 decimals
-  performancePct: number;
+  performancePct: number;       // CALCULATED from gain/loss and totalAmount
   totalAmount: number;          // USD, 2 decimals
-  isLatest: boolean;
+  isLatest: boolean;            // scoped per productType
 }
 
 export interface DailySnapshot {

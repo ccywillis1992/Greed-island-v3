@@ -242,12 +242,17 @@ export function computeSummaryNumbers(
       otherProductsVal = latestOther.reduce((acc, o) => acc + (Number(o.totalAmount) || 0), 0);
       otherUnrealizedGL = latestOther.reduce((acc, o) => acc + (Number(o.unrealizedGainLoss) || 0), 0);
     } else if (otherProducts.length > 0) {
-      // Fallback to last record if isLatest not explicitly flagged
-      const sorted = [...otherProducts].sort(
-        (a, b) => new Date(b.asOfDate).getTime() - new Date(a.asOfDate).getTime()
-      );
-      otherProductsVal = Number(sorted[0].totalAmount) || 0;
-      otherUnrealizedGL = Number(sorted[0].unrealizedGainLoss) || 0;
+      // Fallback: group by productType and pick the latest asOfDate for each productType
+      const byType: Record<string, OtherProductRecord> = {};
+      otherProducts.forEach((o) => {
+        const type = (o.productType && o.productType.trim()) ? o.productType.trim() : 'Other';
+        if (!byType[type] || o.asOfDate > byType[type].asOfDate) {
+          byType[type] = o;
+        }
+      });
+      const latestList = Object.values(byType);
+      otherProductsVal = latestList.reduce((acc, o) => acc + (Number(o.totalAmount) || 0), 0);
+      otherUnrealizedGL = latestList.reduce((acc, o) => acc + (Number(o.unrealizedGainLoss) || 0), 0);
     }
   }
 
@@ -464,8 +469,9 @@ export function runCalcSanitySuite(): {
     {
       id: 'o1',
       asOfDate: '2026-02-01',
+      productType: 'Mutual Funds',
       unrealizedGainLoss: 500,
-      performancePct: 10,
+      performancePct: 11.11,
       totalAmount: 5000,
       isLatest: true,
     },

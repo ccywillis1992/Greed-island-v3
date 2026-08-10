@@ -18,7 +18,7 @@ export const STORAGE_KEYS = {
   SCHEMA_VERSION: 'greedisland:schemaVersion',
 } as const;
 
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 export const STORAGE_ERROR_EVENT = 'greedisland:storage_error';
 
@@ -162,12 +162,68 @@ export function deleteCashEntry(id: string): StorageOperationResult {
 // ==========================================
 // OTHER PRODUCTS CRUD
 // ==========================================
+/**
+ * Normalizes Other Product records:
+ * - Ensures productType defaults to "Other" if empty/missing
+ * - Recalculates performancePct = unrealizedGainLoss / (totalAmount - unrealizedGainLoss) * 100
+ * - Evaluates isLatest per productType (latest asOfDate per productType becomes isLatest: true)
+ */
+export function normalizeOtherProducts(records: OtherProductRecord[]): OtherProductRecord[] {
+  if (!records || records.length === 0) return [];
+
+  // 1. Ensure basic fields and recalculate performance %
+  const processed = records.map((r) => {
+    const productType = r.productType && r.productType.trim() ? r.productType.trim() : 'Other';
+    const totalAmount = Number(r.totalAmount) || 0;
+    const unrealizedGainLoss = Number(r.unrealizedGainLoss) || 0;
+    const denom = totalAmount - unrealizedGainLoss;
+    const rawPerf = denom !== 0 ? (unrealizedGainLoss / denom) * 100 : 0;
+    const performancePct = Math.round(rawPerf * 100) / 100;
+
+    return {
+      ...r,
+      productType,
+      totalAmount: Math.round(totalAmount * 100) / 100,
+      unrealizedGainLoss: Math.round(unrealizedGainLoss * 100) / 100,
+      performancePct,
+      isLatest: false, // Reset before scoping
+    };
+  });
+
+  // 2. Group by productType to determine isLatest scoped per productType
+  const groups: Record<string, OtherProductRecord[]> = {};
+  processed.forEach((r) => {
+    if (!groups[r.productType]) {
+      groups[r.productType] = [];
+    }
+    groups[r.productType].push(r);
+  });
+
+  const normalized: OtherProductRecord[] = [];
+
+  Object.values(groups).forEach((groupRecords) => {
+    // Sort descending by asOfDate
+    const sortedGroup = [...groupRecords].sort((a, b) => b.asOfDate.localeCompare(a.asOfDate));
+
+    // The record with the latest asOfDate for this productType isLatest = true
+    if (sortedGroup.length > 0) {
+      sortedGroup[0].isLatest = true;
+    }
+
+    normalized.push(...sortedGroup);
+  });
+
+  return normalized;
+}
+
 export function getOtherProducts(): OtherProductRecord[] {
-  return getItem<OtherProductRecord[]>(STORAGE_KEYS.OTHER_PRODUCTS, []);
+  const raw = getItem<OtherProductRecord[]>(STORAGE_KEYS.OTHER_PRODUCTS, []);
+  return normalizeOtherProducts(raw);
 }
 
 export function saveOtherProducts(records: OtherProductRecord[]): StorageOperationResult {
-  return setItem<OtherProductRecord[]>(STORAGE_KEYS.OTHER_PRODUCTS, records);
+  const normalized = normalizeOtherProducts(records);
+  return setItem<OtherProductRecord[]>(STORAGE_KEYS.OTHER_PRODUCTS, normalized);
 }
 
 export function addOtherProduct(record: OtherProductRecord): StorageOperationResult {
@@ -285,7 +341,16 @@ export function runMigrations(): StorageOperationResult {
       }
 
       // Mark schema version 1 as completed
-      setItem<number>(STORAGE_KEYS.SCHEMA_VERSION, CURRENT_SCHEMA_VERSION);
+      setItem<number>(STORAGE_KEYS.SCHEMA_VERSION, 1);
+    }
+
+    if (storedVersion < 2) {
+      console.log(`[Greed Island Migrations] Migrating schema to v2 (Other Product multi-type restructures)`);
+      const currentOther = getItem<OtherProductRecord[]>(STORAGE_KEYS.OTHER_PRODUCTS, []);
+      if (currentOther.length > 0) {
+        saveOtherProducts(currentOther);
+      }
+      setItem<number>(STORAGE_KEYS.SCHEMA_VERSION, 2);
     }
 
     // Update lastOpenedAt setting on startup

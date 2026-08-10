@@ -148,7 +148,7 @@ export const History: React.FC = () => {
       {/* Header */}
       <header className="flex items-center justify-between pb-3 border-b border-white/5">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-[#f5f5f7]">Snapshot History</h1>
+          <h1 className="text-xl font-bold tracking-tight text-[#f5f5f7]">Snapshot</h1>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -163,10 +163,10 @@ export const History: React.FC = () => {
                 setStatusMessage({ type: 'error', text: `Export failed: ${res.error}` });
               }
             }}
-            className="gap-1.5 text-xs bg-[#1c1c1e] text-emerald-400 border border-emerald-500/20 hover:bg-[#2c2c2e]"
+            title="Export Excel"
+            className="p-2 text-xs bg-[#1c1c1e] text-emerald-400 border border-emerald-500/20 hover:bg-[#2c2c2e]"
           >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Export Excel</span>
+            <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
           </Button>
 
           <Button
@@ -174,10 +174,10 @@ export const History: React.FC = () => {
             variant="secondary"
             size="sm"
             onClick={() => setIsAddingNew(true)}
-            className="gap-1.5"
+            title="Add Historic Entry"
+            className="p-2"
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Entry</span>
+            <Plus className="w-4 h-4" />
           </Button>
         </div>
       </header>
@@ -447,67 +447,6 @@ export const History: React.FC = () => {
                 </div>
               );
             })}
-          </div>
-        )}
-      </Card>
-
-      {/* Module 5 Sanity Test Inspector */}
-      <Card id="module5-sanity-inspector-card" className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-[#f5f5f7]">
-            <TrendingUp className="w-4 h-4 text-[#007AFF]" />
-            <h2 className="text-sm font-semibold">Module 5 Rules Inspector</h2>
-          </div>
-          <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-white/5 text-[#86868b]">
-            src/lib/snapshot.ts
-          </span>
-        </div>
-
-        <p className="text-xs text-[#86868b] leading-relaxed">
-          Verifies 16:30 HK Cutoff Rule, same-day upserting, 3-day gap backfill generation, and manual edit preservation during syncs.
-        </p>
-
-        <div className="flex items-center justify-between pt-1 border-t border-white/5">
-          <span className="text-xs text-[#f5f5f7] font-medium">Run Module 5 Rule Suite</span>
-          <Button
-            id="run-snapshot-suite-btn"
-            variant="primary"
-            size="sm"
-            onClick={handleRunSanitySuite}
-            className="gap-1.5"
-          >
-            <Play className="w-3.5 h-3.5 fill-current" />
-            <span>Verify Engine</span>
-          </Button>
-        </div>
-
-        {sanityResult && (
-          <div
-            className={`p-3 rounded-xl border font-mono text-[11px] space-y-2 ${
-              sanityResult.success
-                ? 'bg-[#0a0a0a] border-emerald-500/30 text-emerald-300'
-                : 'bg-rose-950/20 border-rose-500/30 text-rose-300'
-            }`}
-          >
-            <div className="flex items-center gap-1.5 font-semibold text-xs pb-1 border-b border-white/10">
-              {sanityResult.success ? (
-                <>
-                  <Check className="w-4 h-4 text-emerald-400" />
-                  <span>All Module 5 Cutoff, Upsert, Backfill, & Manual Rules Passed</span>
-                </>
-              ) : (
-                <>
-                  <ShieldAlert className="w-4 h-4 text-rose-400" />
-                  <span>Module 5 Engine Suite Failed</span>
-                </>
-              )}
-            </div>
-
-            <div className="space-y-1">
-              {sanityResult.logs.map((log, idx) => (
-                <div key={idx}>{log}</div>
-              ))}
-            </div>
           </div>
         )}
       </Card>

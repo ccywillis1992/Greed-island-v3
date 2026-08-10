@@ -260,10 +260,11 @@ export const Summary: React.FC = () => {
   return (
     <div className="space-y-5 pb-10">
       {/* Top Banner & Header */}
-      <header className="flex items-center justify-between pb-2 border-b border-white/5">
-        <div className="flex items-center gap-2">
-          <img src="./icon.svg" alt="Greed Island" className="w-8 h-8 rounded-lg bg-[#007AFF]/10 p-1 border border-[#007AFF]/20 shrink-0" />
-          <span className="text-[11px] font-mono text-[#86868b] bg-white/5 px-2 py-0.5 rounded-md border border-white/5">
+      <header className="flex items-center justify-between pb-2 border-b border-white/5 gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <img src="./icon.svg" alt="Greed Island" className="w-7 h-7 rounded-lg bg-[#007AFF]/10 p-1 border border-[#007AFF]/20 shrink-0" />
+          <span className="text-sm font-extrabold tracking-tight text-[#f5f5f7] whitespace-nowrap">GREED ISLAND</span>
+          <span className="text-[10px] font-mono text-[#86868b] bg-white/5 px-1.5 py-0.5 rounded-md border border-white/5 shrink-0">
             {hkInfo.bucketDateStr}
           </span>
         </div>
