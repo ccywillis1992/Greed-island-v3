@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { storage, STORAGE_ERROR_EVENT } from '../lib/storage';
-import { OtherProductRecord } from '../types';
+import { OtherProductRecord, Broker } from '../types';
+import { computeCashTotal } from '../lib/calc';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { DateInput } from '../components/DateInput';
@@ -25,6 +26,8 @@ import {
   History,
   Filter,
   Tag,
+  AlertTriangle,
+  Landmark,
 } from 'lucide-react';
 
 export const OtherProductDetail: React.FC = () => {
@@ -35,6 +38,7 @@ export const OtherProductDetail: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [asOfDate, setAsOfDate] = useState<string>(getTodayStr());
   const [productType, setProductType] = useState<string>('Mutual Funds');
+  const [broker, setBroker] = useState<Broker>('IBKR');
   const [totalAmount, setTotalAmount] = useState<string>('');
   const [unrealizedGainLoss, setUnrealizedGainLoss] = useState<string>('');
 
@@ -163,6 +167,7 @@ export const OtherProductDetail: React.FC = () => {
     setEditingId(null);
     setAsOfDate(getTodayStr());
     setProductType('Mutual Funds');
+    setBroker('IBKR');
     setTotalAmount('');
     setUnrealizedGainLoss('');
     setFormError(null);
@@ -174,11 +179,13 @@ export const OtherProductDetail: React.FC = () => {
       setEditingId(record.id);
       setAsOfDate(record.asOfDate);
       setProductType(record.productType || 'Mutual Funds');
+      setBroker(record.broker || 'IBKR');
       setTotalAmount(record.totalAmount.toString());
       setUnrealizedGainLoss(record.unrealizedGainLoss.toString());
     } else {
       setEditingId(null);
       setAsOfDate(getTodayStr());
+      setBroker('IBKR');
       setTotalAmount('');
       setUnrealizedGainLoss('');
     }
@@ -195,6 +202,7 @@ export const OtherProductDetail: React.FC = () => {
     setEditingId(null);
     setAsOfDate(getTodayStr());
     setProductType(record.productType || 'Mutual Funds');
+    setBroker(record.broker || 'IBKR');
     setTotalAmount(record.totalAmount.toString());
     setUnrealizedGainLoss(record.unrealizedGainLoss.toString());
     setFormError(null);
@@ -206,7 +214,7 @@ export const OtherProductDetail: React.FC = () => {
     }
   };
 
-  // Form Submit Handler (A2, A3)
+  // Form Submit Handler (A2, A3, C1-C5)
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
@@ -246,6 +254,7 @@ export const OtherProductDetail: React.FC = () => {
           ...target,
           asOfDate,
           productType: typeClean,
+          broker,
           totalAmount: roundedTotal,
           unrealizedGainLoss: roundedGainLoss,
           performancePct: calculatedPerfPct,
@@ -255,13 +264,13 @@ export const OtherProductDetail: React.FC = () => {
           setFormError(res.error || 'Failed to update record.');
           return;
         }
-        showToast(`Updated ${typeClean} record as of ${asOfDate}!`, 'success');
       }
     } else {
       const newRecord: OtherProductRecord = {
         id: `other-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         asOfDate,
         productType: typeClean,
+        broker,
         totalAmount: roundedTotal,
         unrealizedGainLoss: roundedGainLoss,
         performancePct: calculatedPerfPct,
@@ -273,6 +282,18 @@ export const OtherProductDetail: React.FC = () => {
         setFormError(res.error || 'Failed to save new record.');
         return;
       }
+    }
+
+    // C5. Negative Cash Balance Warning Handling
+    const postSaveBrokerBal = computeCashTotal(storage.getCashEntries(), broker);
+    if (postSaveBrokerBal < 0) {
+      showToast(
+        `${broker} cash balance is now negative: -$${Math.abs(postSaveBrokerBal).toFixed(2)}`,
+        'error'
+      );
+    } else if (editingId) {
+      showToast(`Updated ${typeClean} record as of ${asOfDate}!`, 'success');
+    } else {
       showToast(`Recorded new valuation for ${typeClean} as of ${asOfDate}!`, 'success');
     }
 
@@ -302,6 +323,7 @@ export const OtherProductDetail: React.FC = () => {
         id: `sample-mf-1-${Date.now()}`,
         asOfDate: today,
         productType: 'Mutual Funds',
+        broker: 'HSBC',
         totalAmount: 25000.0,
         unrealizedGainLoss: 2500.0,
         performancePct: 11.11,
@@ -311,6 +333,7 @@ export const OtherProductDetail: React.FC = () => {
         id: `sample-mf-2-${Date.now()}`,
         asOfDate: prevDate1,
         productType: 'Mutual Funds',
+        broker: 'HSBC',
         totalAmount: 22000.0,
         unrealizedGainLoss: 1800.0,
         performancePct: 8.91,
@@ -320,6 +343,7 @@ export const OtherProductDetail: React.FC = () => {
         id: `sample-bond-1-${Date.now()}`,
         asOfDate: today,
         productType: 'Bonds',
+        broker: 'IBKR',
         totalAmount: 15000.0,
         unrealizedGainLoss: 600.0,
         performancePct: 4.17,
@@ -329,6 +353,7 @@ export const OtherProductDetail: React.FC = () => {
         id: `sample-bond-2-${Date.now()}`,
         asOfDate: prevDate2,
         productType: 'Bonds',
+        broker: 'IBKR',
         totalAmount: 14500.0,
         unrealizedGainLoss: 300.0,
         performancePct: 2.11,
@@ -601,7 +626,28 @@ export const OtherProductDetail: React.FC = () => {
               </div>
             </div>
 
-            {/* Field 2: As Of Date */}
+            {/* Field 2: Broker */}
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase font-semibold text-[#86868b] tracking-wider block">
+                Broker
+              </label>
+              <div className="relative">
+                <Landmark className="w-3.5 h-3.5 text-[#86868b] absolute left-3 top-1/2 -translate-y-1/2" />
+                <select
+                  value={broker}
+                  onChange={(e) => setBroker(e.target.value as Broker)}
+                  className="w-full bg-[#1c1c1e] border border-white/10 rounded-xl pl-8 pr-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500 font-mono appearance-none"
+                  required
+                >
+                  <option value="FUTU">FUTU</option>
+                  <option value="IBKR">IBKR</option>
+                  <option value="HSBC">HSBC</option>
+                  <option value="Binance">Binance</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Field 3: As Of Date */}
             <div className="space-y-1">
               <label className="text-[10px] uppercase font-semibold text-[#86868b] tracking-wider block">
                 As Of Date
@@ -614,7 +660,7 @@ export const OtherProductDetail: React.FC = () => {
               />
             </div>
 
-            {/* Field 3: Total Amount (USD) */}
+            {/* Field 4: Total Amount (USD) */}
             <div className="space-y-1">
               <label className="text-[10px] uppercase font-semibold text-[#86868b] tracking-wider block">
                 Total Amount (USD)
@@ -747,6 +793,17 @@ export const OtherProductDetail: React.FC = () => {
                     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30 truncate max-w-[100px] sm:max-w-[160px] shrink">
                       {record.productType}
                     </span>
+
+                    {record.broker ? (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#1c1c1e] text-slate-300 border border-white/10 shrink-0">
+                        {record.broker}
+                      </span>
+                    ) : (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center gap-1 shrink-0" title="Broker missing. Edit this record to assign a broker.">
+                        <AlertTriangle className="w-2.5 h-2.5" />
+                        Broker needed
+                      </span>
+                    )}
 
                     {record.isLatest && (
                       <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0">

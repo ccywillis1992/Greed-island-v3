@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { storage, STORAGE_ERROR_EVENT } from '../lib/storage';
 import { refreshPrice, getUsdHkdRate, convertHkdToUsd } from '../lib/priceApi';
+import { computeCashTotal } from '../lib/calc';
 import { Trade, Broker, Market, Action } from '../types';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
@@ -203,15 +204,26 @@ export const StockForm: React.FC = () => {
     let result;
     if (editingId) {
       result = storage.updateTrade(tradeData);
-      showToast(`Trade for ${cleanTicker} updated successfully!`, 'success');
     } else {
       result = storage.addTrade(tradeData);
-      showToast(`Recorded ${action} trade for ${cleanTicker}!`, 'success');
     }
 
     if (!result.success) {
       setFormError(result.error || 'Failed to save trade to storage.');
       return;
+    }
+
+    // B4. Negative Cash Balance Handling
+    const postTradeBrokerBal = computeCashTotal(storage.getCashEntries(), broker);
+    if (postTradeBrokerBal < 0) {
+      showToast(
+        `${broker} cash balance is now negative: -$${Math.abs(postTradeBrokerBal).toFixed(2)}`,
+        'error'
+      );
+    } else if (editingId) {
+      showToast(`Trade for ${cleanTicker} updated successfully!`, 'success');
+    } else {
+      showToast(`Recorded ${action} trade for ${cleanTicker}!`, 'success');
     }
 
     // Refresh state immediately

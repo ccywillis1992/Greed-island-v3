@@ -237,14 +237,22 @@ export function computeSummaryNumbers(
   let otherProductsVal = 0;
   let otherUnrealizedGL = 0;
   if (marketFilter === 'ALL' || marketFilter === 'OTHER') {
-    const latestOther = otherProducts.filter((o) => o.isLatest);
+    // Filter other products by broker if brokerFilter is specific (E1 requirement: exclude records without broker from broker-filtered views)
+    const eligibleOtherProducts = otherProducts.filter((o) => {
+      if (brokerFilter !== 'ALL') {
+        return o.broker === brokerFilter;
+      }
+      return true;
+    });
+
+    const latestOther = eligibleOtherProducts.filter((o) => o.isLatest);
     if (latestOther.length > 0) {
       otherProductsVal = latestOther.reduce((acc, o) => acc + (Number(o.totalAmount) || 0), 0);
       otherUnrealizedGL = latestOther.reduce((acc, o) => acc + (Number(o.unrealizedGainLoss) || 0), 0);
-    } else if (otherProducts.length > 0) {
+    } else if (eligibleOtherProducts.length > 0) {
       // Fallback: group by productType and pick the latest asOfDate for each productType
       const byType: Record<string, OtherProductRecord> = {};
-      otherProducts.forEach((o) => {
+      eligibleOtherProducts.forEach((o) => {
         const type = (o.productType && o.productType.trim()) ? o.productType.trim() : 'Other';
         if (!byType[type] || o.asOfDate > byType[type].asOfDate) {
           byType[type] = o;
