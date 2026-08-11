@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { storage, STORAGE_ERROR_EVENT } from '../lib/storage';
-import { refreshPrice, getUsdHkdRate, convertHkdToUsd } from '../lib/priceApi';
-import { computeCashTotal } from '../lib/calc';
+import { refreshPrice, getUsdHkdRate } from '../lib/priceApi';
+import { computeCashTotal, calculateServiceChargeAndNet } from '../lib/calc';
 import { Trade, Broker, Market, Action } from '../types';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
@@ -95,16 +95,38 @@ export const StockForm: React.FC = () => {
     );
   }, [trades, tradesSearch]);
 
-  // Auto-calculate Total Amount in USD
-  const computedTotal = useMemo(() => {
+  // Auto-calculate Total Amount, Service Charge, and Net Amount in USD
+  const computedTradeMetrics = useMemo(() => {
     const q = parseFloat(quantity);
     const p = parseFloat(price);
-    if (isNaN(q) || isNaN(p) || q <= 0 || p <= 0) return 0;
+    if (isNaN(q) || isNaN(p) || q <= 0 || p <= 0) {
+      return { totalAmount: 0, serviceCharge: 0, netAmount: 0, finalPriceUsd: 0 };
+    }
 
-    // If market is HK, price is entered in HKD, so convert to USD for Total Amount
-    const priceUsd = market === 'HK' ? p / usdHkdRate : p;
-    return Math.round(q * priceUsd * 100) / 100;
-  }, [quantity, price, market, usdHkdRate]);
+    const finalPriceUsd = market === 'HK' ? Math.round((p / usdHkdRate) * 1000) / 1000 : Math.round(p * 1000) / 1000;
+    const roundedQty = Math.round(q * 100000) / 100000;
+    const totalAmount = Math.round(roundedQty * finalPriceUsd * 100) / 100;
+
+    const chargeRes = calculateServiceChargeAndNet({
+      broker,
+      market,
+      action,
+      quantity: roundedQty,
+      rawPrice: p,
+      totalAmount,
+      fxRate: usdHkdRate,
+    });
+
+    return {
+      totalAmount,
+      serviceCharge: chargeRes.serviceCharge,
+      netAmount: chargeRes.netAmount,
+      finalPriceUsd,
+      originalCurrency: chargeRes.originalCurrency,
+      originalPrice: p,
+      fxRateAtEntry: chargeRes.fxRateAtEntry,
+    };
+  }, [quantity, price, market, broker, action, usdHkdRate]);
 
   // Smart Market Suggestion based on Ticker Input
   const handleTickerChange = (raw: string) => {
@@ -179,15 +201,22 @@ export const StockForm: React.FC = () => {
       return;
     }
 
-    // Convert HKD price to USD if market === 'HK'
-    let finalPriceUsd = parsedPrice;
-    if (market === 'HK') {
-      finalPriceUsd = await convertHkdToUsd(parsedPrice);
-    } else {
-      finalPriceUsd = Math.round(parsedPrice * 100) / 100;
-    }
+    const roundedQty = Math.round(parsedQty * 100000) / 100000; // Max 5 decimals
+    const finalPriceUsd =
+      market === 'HK'
+        ? Math.round((parsedPrice / usdHkdRate) * 1000) / 1000
+        : Math.round(parsedPrice * 1000) / 1000; // Max 3 decimals
+    const totalAmount = Math.round(roundedQty * finalPriceUsd * 100) / 100; // 2 decimals
 
-    const totalAmount = Math.round(parsedQty * finalPriceUsd * 100) / 100;
+    const chargeRes = calculateServiceChargeAndNet({
+      broker,
+      market,
+      action,
+      quantity: roundedQty,
+      rawPrice: parsedPrice,
+      totalAmount,
+      fxRate: usdHkdRate,
+    });
 
     const tradeData: Trade = {
       id: editingId || `trade-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -196,9 +225,15 @@ export const StockForm: React.FC = () => {
       market,
       broker,
       action,
-      quantity: Math.round(parsedQty * 1000) / 1000, // 3 decimals
-      price: finalPriceUsd,                           // Always USD stored
+      quantity: roundedQty,
+      price: finalPriceUsd,
       totalAmount,
+      serviceCharge: chargeRes.serviceCharge,
+      netAmount: chargeRes.netAmount,
+      originalCurrency: chargeRes.originalCurrency,
+      originalPrice: parsedPrice,
+      fxRateAtEntry: chargeRes.fxRateAtEntry,
+      chargeIsApproximate: false,
     };
 
     let result;
@@ -462,8 +497,8 @@ export const StockForm: React.FC = () => {
             </div>
           </div>
 
-          {/* Row 3: Quantity, Price, Total Amount */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Row 3: Quantity, Price, Total Amount, Service Charge & Net Amount */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
             {/* Quantity */}
             <div className="space-y-1">
               <label className="text-[10px] uppercase font-semibold text-[#86868b] tracking-wider block">
@@ -472,7 +507,7 @@ export const StockForm: React.FC = () => {
               <input
                 type="number"
                 step="any"
-                min="0.0001"
+                min="0.00001"
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
                 placeholder="e.g. 10 or 0.05"
@@ -489,7 +524,7 @@ export const StockForm: React.FC = () => {
               <input
                 type="number"
                 step="any"
-                min="0.01"
+                min="0.001"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
                 placeholder={market === 'HK' ? 'e.g. 25.50' : 'e.g. 420.50'}
@@ -504,10 +539,28 @@ export const StockForm: React.FC = () => {
                 Total Amount (Auto USD)
               </label>
               <div className="w-full bg-[#18181a] border border-white/5 rounded-xl px-3 py-2 text-xs text-white font-mono font-bold flex items-center justify-between text-[#007AFF]">
-                <span>{formatUSD(computedTotal)}</span>
+                <span>{formatUSD(computedTradeMetrics.totalAmount)}</span>
                 <span className="text-[9px] text-[#86868b] font-normal uppercase">
                   {market === 'HK' ? 'HKD Converted → USD' : 'Price × Qty'}
                 </span>
+              </div>
+            </div>
+
+            {/* Service Charge & Net Amount (Auto USD) */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[10px] uppercase font-semibold text-[#86868b] tracking-wider">
+                <span>Fee / Net Cash</span>
+                <span className="text-amber-400 font-normal text-[9px]">{broker} Fee</span>
+              </div>
+              <div className="w-full bg-[#18181a] border border-white/5 rounded-xl px-3 py-1.5 text-xs text-white font-mono space-y-0.5">
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-[#86868b]">Fee:</span>
+                  <span className="text-amber-300 font-bold">${computedTradeMetrics.serviceCharge.toFixed(2)}</span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] font-bold text-emerald-400 border-t border-white/5 pt-0.5">
+                  <span>Net {action === 'BUY' ? 'Cost' : 'Proceeds'}:</span>
+                  <span>{formatUSD(computedTradeMetrics.netAmount)}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -609,21 +662,34 @@ export const StockForm: React.FC = () => {
                     <span className="text-[11px] text-[#86868b]">{trade.date}</span>
                   </div>
 
-                  {/* Quantity, Price & Total Row */}
-                  <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-white/5 whitespace-nowrap gap-2">
-                    <div className="flex items-center gap-3 text-[#86868b]">
+                  {/* Quantity, Price, Fee & Net Row */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between text-[11px] pt-1.5 border-t border-white/5 gap-2">
+                    <div className="flex flex-wrap items-center gap-3 text-[#86868b]">
                       <span>
                         Qty: <strong className="text-white">{trade.quantity}</strong>
                       </span>
                       <span>
-                        Price: <strong className="text-white">${trade.price.toFixed(2)}</strong>
+                        Price:{' '}
+                        <strong className="text-white">
+                          {trade.originalCurrency === 'HKD' && trade.originalPrice
+                            ? `HK$${trade.originalPrice.toFixed(2)} ($${trade.price.toFixed(3)})`
+                            : `$${trade.price.toFixed(3)}`}
+                        </strong>
                       </span>
+                      {trade.serviceCharge !== undefined && (
+                        <span className="text-amber-400/90 font-mono" title={trade.chargeIsApproximate ? 'Estimated fee at import' : 'Broker fee'}>
+                          Fee: {trade.chargeIsApproximate ? '~' : ''}${trade.serviceCharge.toFixed(2)}
+                        </span>
+                      )}
                     </div>
 
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-white font-bold text-xs">
-                        {formatUSD(trade.totalAmount)}
-                      </span>
+                    <div className="flex items-center justify-between sm:justify-end gap-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[#86868b] text-[10px]">Net:</span>
+                        <span className="text-white font-bold text-xs">
+                          {formatUSD(trade.netAmount ?? trade.totalAmount)}
+                        </span>
+                      </div>
 
                       {/* Controls (✏ Edit, 🗑 Delete) */}
                       <div className="flex items-center gap-1 border-l border-white/10 pl-2">

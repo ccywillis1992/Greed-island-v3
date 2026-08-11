@@ -717,10 +717,18 @@ export const StockDetail: React.FC = () => {
 
                             <div className="flex items-center gap-3">
                               <span className="text-white">
-                                {trade.quantity} @ ${trade.price.toFixed(2)}
+                                {trade.quantity} @ ${trade.price.toFixed(3)}
                               </span>
+                              {trade.serviceCharge !== undefined && (
+                                <span
+                                  className="text-amber-400 text-[10px]"
+                                  title={trade.chargeIsApproximate ? 'Estimated fee at import' : 'Broker fee'}
+                                >
+                                  Fee: {trade.chargeIsApproximate ? '~' : ''}${trade.serviceCharge.toFixed(2)}
+                                </span>
+                              )}
                               <span className="text-[#86868b]">
-                                (${trade.totalAmount.toFixed(2)})
+                                (Net: ${(trade.netAmount ?? trade.totalAmount).toFixed(2)})
                               </span>
 
                               <button

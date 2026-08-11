@@ -7,6 +7,8 @@ import {
   AppSettings,
 } from '../types';
 import { storage, STORAGE_KEYS, setItem, CURRENT_SCHEMA_VERSION, STORAGE_ERROR_EVENT } from './storage';
+import { CHARGE_SCHEDULE } from './calc';
+import { getUsdHkdRate } from './priceApi';
 
 export interface BackupData {
   appName: string; // 'Greed Island Portfolio'
@@ -261,20 +263,87 @@ export function parseAndValidateBackup(jsonString: string): BackupValidationResu
 }
 
 /**
+  * Shared function used exclusively during JSON import to backfill missing trade charges.
+  */
+export function backfillTradeCharge(trade: Trade, currentFxRate: number): Trade {
+  if (
+    trade.serviceCharge !== undefined &&
+    trade.serviceCharge !== null &&
+    trade.netAmount !== undefined &&
+    trade.netAmount !== null
+  ) {
+    return trade;
+  }
+
+  const rule = CHARGE_SCHEDULE[trade.broker]?.[trade.market] || { type: 'none' };
+  let serviceCharge = 0;
+  let chargeIsApproximate = false;
+
+  if (rule.type === 'flat') {
+    serviceCharge = rule.amountUsd;
+  } else if (rule.type === 'flatPlusPercentOfNotional') {
+    if (trade.originalPrice && trade.fxRateAtEntry) {
+      const notionalHKD = trade.originalPrice * trade.quantity;
+      const chargeHKD = rule.flatAmount + (rule.percent / 100) * notionalHKD;
+      serviceCharge = Math.round((chargeHKD / trade.fxRateAtEntry) * 100) / 100;
+    } else {
+      // Older export missing originalPrice and fxRateAtEntry -> approximate using current FX rate
+      const notionalHKD = trade.totalAmount * currentFxRate;
+      const chargeHKD = rule.flatAmount + (rule.percent / 100) * notionalHKD;
+      serviceCharge = Math.round((chargeHKD / currentFxRate) * 100) / 100;
+      chargeIsApproximate = true;
+    }
+  } else {
+    serviceCharge = 0;
+  }
+
+  const netAmount =
+    trade.action === 'BUY'
+      ? Math.round((trade.totalAmount + serviceCharge) * 100) / 100
+      : Math.round((trade.totalAmount - serviceCharge) * 100) / 100;
+
+  return {
+    ...trade,
+    serviceCharge,
+    netAmount,
+    chargeIsApproximate: trade.chargeIsApproximate ?? chargeIsApproximate,
+  };
+}
+
+/**
  * Performs a FULL-REPLACE import overwriting all localStorage collections with backup data.
  */
-export function importBackupData(backupData: BackupData): { success: boolean; error?: string } {
+export async function importBackupData(backupData: BackupData): Promise<{ success: boolean; error?: string }> {
   try {
     if (!backupData) {
       return { success: false, error: 'No backup data provided.' };
     }
 
+    const currentFxRate = await getUsdHkdRate().catch(() => 7.81);
+
+    // Backfill trade charges during import
+    const backfilledTrades = backupData.trades.map((trade) => backfillTradeCharge(trade, currentFxRate));
+
+    // Update cash entries that were linked to trades
+    const updatedCashEntries = backupData.cashEntries.map((cash) => {
+      if (cash.linkedTradeId) {
+        const linkedTrade = backfilledTrades.find((t) => t.id === cash.linkedTradeId);
+        if (linkedTrade && linkedTrade.netAmount !== undefined) {
+          return {
+            ...cash,
+            amount: linkedTrade.netAmount,
+          };
+        }
+      }
+      return cash;
+    });
+
     // 1. Write trades
-    const resTrades = setItem(STORAGE_KEYS.TRADES, backupData.trades);
+    const resTrades = setItem(STORAGE_KEYS.TRADES, backfilledTrades);
     if (!resTrades.success) throw new Error(`Failed to restore trades: ${resTrades.error}`);
 
     // 2. Write cash entries
-    const resCash = setItem(STORAGE_KEYS.CASH, backupData.cashEntries);
+    const resCash = setItem(STORAGE_KEYS.CASH, updatedCashEntries);
     if (!resCash.success) throw new Error(`Failed to restore cash entries: ${resCash.error}`);
 
     // 3. Write other products

@@ -1,9 +1,90 @@
-import { Trade, CashEntry, OtherProductRecord, DailySnapshot, PriceCacheEntry, Position, Market, Broker, MarketFilter, BrokerFilter } from '../types';
+import { Trade, CashEntry, OtherProductRecord, DailySnapshot, PriceCacheEntry, Position, Market, Broker, MarketFilter, BrokerFilter, ChargeRule } from '../types';
 
 /**
  * MODULE 4: Portfolio Calculation Engine
  * Pure functions with no side effects.
  */
+
+/**
+ * Service Charge Schedule Lookup Definition
+ */
+export const CHARGE_SCHEDULE: Record<Broker, Partial<Record<Market, ChargeRule>>> = {
+  FUTU: {
+    HK: { type: 'flatPlusPercentOfNotional', flatAmount: 15, flatCurrency: 'HKD', percent: 0.1 },
+    US: { type: 'flat', amountUsd: 2.01 },
+    CRYPTO: { type: 'none' },
+    OTHER: { type: 'none' },
+  },
+  IBKR: {
+    US: { type: 'none' },
+    HK: { type: 'none' },
+    CRYPTO: { type: 'none' },
+    OTHER: { type: 'none' },
+  },
+  HSBC: {
+    US: { type: 'none' },
+    HK: { type: 'none' },
+    CRYPTO: { type: 'none' },
+    OTHER: { type: 'none' },
+  },
+  Binance: {
+    US: { type: 'none' },
+    HK: { type: 'none' },
+    CRYPTO: { type: 'none' },
+    OTHER: { type: 'none' },
+  },
+};
+
+export interface TradeChargeCalculationResult {
+  serviceCharge: number; // in USD (2dp)
+  netAmount: number; // in USD (2dp)
+  originalCurrency: 'USD' | 'HKD';
+  originalPrice: number;
+  fxRateAtEntry: number;
+  chargeIsApproximate: boolean;
+}
+
+export function calculateServiceChargeAndNet(params: {
+  broker: Broker;
+  market: Market;
+  action: 'BUY' | 'SELL';
+  quantity: number;
+  rawPrice: number;
+  totalAmount: number;
+  fxRate?: number;
+}): TradeChargeCalculationResult {
+  const { broker, market, action, quantity, rawPrice, totalAmount, fxRate = 7.81 } = params;
+
+  const rule: ChargeRule = CHARGE_SCHEDULE[broker]?.[market] || { type: 'none' };
+  let serviceCharge = 0;
+  const originalCurrency: 'USD' | 'HKD' = market === 'HK' ? 'HKD' : 'USD';
+  const originalPrice = rawPrice;
+  const fxRateAtEntry = market === 'HK' ? fxRate : 1;
+
+  if (rule.type === 'flat') {
+    serviceCharge = rule.amountUsd;
+  } else if (rule.type === 'flatPlusPercentOfNotional') {
+    const notionalHKD = originalPrice * quantity;
+    const chargeHKD = rule.flatAmount + (rule.percent / 100) * notionalHKD;
+    serviceCharge = chargeHKD / fxRateAtEntry;
+  } else {
+    serviceCharge = 0;
+  }
+
+  serviceCharge = Math.round(serviceCharge * 100) / 100;
+
+  let netAmount = action === 'BUY' ? totalAmount + serviceCharge : totalAmount - serviceCharge;
+  netAmount = Math.round(netAmount * 100) / 100;
+
+  return {
+    serviceCharge,
+    netAmount,
+    originalCurrency,
+    originalPrice,
+    fxRateAtEntry,
+    chargeIsApproximate: false,
+  };
+}
 
 /**
  * Normalizes HK or Crypto ticker symbols for price cache lookup
@@ -72,10 +153,11 @@ export function computePositions(
     const tradeQty = Number(trade.quantity);
     const tradePrice = Number(trade.price);
     const tradeTotal = trade.totalAmount ? Number(trade.totalAmount) : tradeQty * tradePrice;
+    const tradeNet = (trade.netAmount !== undefined && trade.netAmount !== null) ? Number(trade.netAmount) : tradeTotal;
 
     if (trade.action === 'BUY') {
       pos.quantity += tradeQty;
-      pos.totalCost += tradeTotal;
+      pos.totalCost += tradeNet;
       pos.avgCost = pos.quantity > 0 ? pos.totalCost / pos.quantity : 0;
     } else if (trade.action === 'SELL') {
       // Average cost remains unchanged on SELL
@@ -163,7 +245,7 @@ export function computePositions(
       ticker: pos.ticker,
       market: pos.market,
       broker: pos.broker,
-      quantity: Math.round(pos.quantity * 1000) / 1000,
+      quantity: Math.round(pos.quantity * 100000) / 100000,
       totalCost: roundedTotalCost,
       avgCost: Math.round(pos.avgCost * 100) / 100,
       currentPrice: Math.round(currentPrice * 100) / 100,

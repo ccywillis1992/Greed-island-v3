@@ -5,6 +5,11 @@ export type BrokerFilter = "ALL" | Broker;
 export type Action = "BUY" | "SELL";
 export type CashAction = "IN" | "OUT";
 
+export type ChargeRule =
+  | { type: 'none' }
+  | { type: 'flat'; amountUsd: number }
+  | { type: 'flatPlusPercentOfNotional'; flatAmount: number; flatCurrency: 'HKD'; percent: number };
+
 export interface Trade {
   id: string;
   date: string;        // ISO date (YYYY-MM-DD)
@@ -12,9 +17,15 @@ export interface Trade {
   market: Market;
   broker: Broker;
   action: Action;
-  quantity: number;    // 3 decimals
-  price: number;       // 2 decimals, USD
+  quantity: number;    // Up to 5 decimals
+  price: number;       // Up to 3 decimals, USD
   totalAmount: number; // price * quantity, 2 decimals
+  serviceCharge?: number; // Service charge in USD (2dp)
+  netAmount?: number; // BUY: totalAmount + serviceCharge, SELL: totalAmount - serviceCharge (2dp)
+  originalCurrency?: 'USD' | 'HKD';
+  originalPrice?: number; // Raw price entered before USD conversion
+  fxRateAtEntry?: number; // FX rate (HKD per USD) used at time of entry
+  chargeIsApproximate?: boolean; // Set true if fee was estimated during backup backfill
 }
 
 export interface CashEntry {

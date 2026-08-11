@@ -96,14 +96,14 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   };
 
   // 3. Confirm Full-Replace Import Handler
-  const handleConfirmImport = () => {
+  const handleConfirmImport = async () => {
     if (!validationResult?.data) {
       showToast('No valid backup data to restore.', 'error');
       return;
     }
 
     setIsProcessing(true);
-    const res = importBackupData(validationResult.data);
+    const res = await importBackupData(validationResult.data);
     setIsProcessing(false);
 
     if (res.success) {
