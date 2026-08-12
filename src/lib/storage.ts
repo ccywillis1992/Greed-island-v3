@@ -21,6 +21,7 @@ export const STORAGE_KEYS = {
 export const CURRENT_SCHEMA_VERSION = 2;
 
 export const STORAGE_ERROR_EVENT = 'greedisland:storage_error';
+export const PRICE_CACHE_UPDATED_EVENT = 'greedisland:price_cache_updated';
 
 /**
  * Dispatches a custom window event when a storage operation fails,
@@ -386,7 +387,11 @@ export function getPriceCache(): Record<string, PriceCacheEntry> {
 }
 
 export function savePriceCache(cache: Record<string, PriceCacheEntry>): StorageOperationResult {
-  return setItem<Record<string, PriceCacheEntry>>(STORAGE_KEYS.PRICE_CACHE, cache);
+  const result = setItem<Record<string, PriceCacheEntry>>(STORAGE_KEYS.PRICE_CACHE, cache);
+  if (result.success && typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(PRICE_CACHE_UPDATED_EVENT));
+  }
+  return result;
 }
 
 export function setPriceCacheEntry(tickerKey: string, entry: PriceCacheEntry): StorageOperationResult {

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { storage, STORAGE_ERROR_EVENT } from '../lib/storage';
+import { storage, STORAGE_ERROR_EVENT, PRICE_CACHE_UPDATED_EVENT } from '../lib/storage';
 import { computePositions } from '../lib/calc';
-import { refreshPrice, batchFetchPrices } from '../lib/priceApi';
+import { refreshPrice, batchFetchPrices, shouldAutoRefresh, recordAutoRefreshTime } from '../lib/priceApi';
 import {
   BrokerFilter,
   MarketFilter,
@@ -24,8 +24,6 @@ import {
   ChevronDown,
   ChevronUp,
   ShieldAlert,
-  Zap,
-  ZapOff,
   Trash2,
   Calendar,
   Layers,
@@ -48,6 +46,7 @@ export const StockDetail: React.FC = () => {
   // UI States
   const [refreshingTickers, setRefreshingTickers] = useState<Record<string, boolean>>({});
   const [isRefreshingAll, setIsRefreshingAll] = useState<boolean>(false);
+  const [refreshProgress, setRefreshProgress] = useState<{ current: number; total: number } | null>(null);
   const [expandedTicker, setExpandedTicker] = useState<string | null>(urlTicker ? urlTicker.toUpperCase() : null);
   const [storageVersion, setStorageVersion] = useState<number>(0);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -57,9 +56,14 @@ export const StockDetail: React.FC = () => {
     const handleStorageError = () => {
       setStorageVersion((v) => v + 1);
     };
+    const handlePriceCacheUpdate = () => {
+      setStorageVersion((v) => v + 1);
+    };
     window.addEventListener(STORAGE_ERROR_EVENT, handleStorageError);
+    window.addEventListener(PRICE_CACHE_UPDATED_EVENT, handlePriceCacheUpdate);
     return () => {
       window.removeEventListener(STORAGE_ERROR_EVENT, handleStorageError);
+      window.removeEventListener(PRICE_CACHE_UPDATED_EVENT, handlePriceCacheUpdate);
     };
   }, []);
 
@@ -73,7 +77,6 @@ export const StockDetail: React.FC = () => {
 
   // Load storage data
   const trades = useMemo(() => {
-    // Read trades triggering re-evaluation on storageVersion change
     return storage.getTrades();
   }, [storageVersion]);
 
@@ -85,6 +88,20 @@ export const StockDetail: React.FC = () => {
   const positions = useMemo(() => {
     return computePositions(trades, priceCache, selectedBroker);
   }, [trades, priceCache, selectedBroker]);
+
+  // Auto-refresh prices on page mount if session throttle condition is met
+  useEffect(() => {
+    if (positions.length > 0 && shouldAutoRefresh()) {
+      recordAutoRefreshTime();
+      const itemsToFetch = Array.from(
+        new Set<string>(positions.map((p) => `${p.market}:${p.ticker}`))
+      ).map((key) => {
+        const [market, ticker] = key.split(':') as [Market, string];
+        return { ticker, market };
+      });
+      batchFetchPrices(itemsToFetch, 4, 100);
+    }
+  }, [positions]);
 
   // Filter positions by search query and market filter
   const filteredPositions = useMemo(() => {
@@ -137,6 +154,7 @@ export const StockDetail: React.FC = () => {
   const handleRefreshAllPrices = async () => {
     if (positions.length === 0) return;
     setIsRefreshingAll(true);
+    setRefreshProgress({ current: 0, total: 0 });
 
     try {
       const itemsToFetch = Array.from(
@@ -146,46 +164,28 @@ export const StockDetail: React.FC = () => {
         return { ticker, market };
       });
 
-      const results = await batchFetchPrices(itemsToFetch, 3, 200);
+      setRefreshProgress({ current: 0, total: itemsToFetch.length });
+
+      const results = await batchFetchPrices(itemsToFetch, 4, 100, (current, total) => {
+        setRefreshProgress({ current, total });
+      });
+
       setStorageVersion((v) => v + 1);
 
       const successCount = results.filter((r) => r.success).length;
-      showToast(`Refreshed ${successCount}/${results.length} prices successfully`, 'success');
+      const failCount = results.length - successCount;
+
+      if (failCount > 0) {
+        showToast(`${successCount} of ${results.length} updated, ${failCount} failed — tap a red light to retry individually`, 'info');
+      } else {
+        showToast(`All ${results.length} prices updated successfully`, 'success');
+      }
     } catch (err) {
       showToast('Error during batch price refresh', 'error');
     } finally {
       setIsRefreshingAll(false);
+      setRefreshProgress(null);
     }
-  };
-
-  // Toggle Price Cache Status simulator (Allows testing acceptance criterion: "Manually killing a price fetch shows red light + fallback")
-  const handleSimulateStatusFail = (ticker: string, market: Market) => {
-    const cacheKey = `${market}:${ticker}`;
-    const currentEntry = priceCache[cacheKey] || priceCache[ticker];
-
-    if (!currentEntry) {
-      // Create a mock fallback price entry with status fail
-      const mockEntry: PriceCacheEntry = {
-        ticker,
-        market,
-        price: 150.0,
-        lastFetchedAt: new Date().toISOString(),
-        lastFetchStatus: 'fail',
-      };
-      storage.setPriceCacheEntry(cacheKey, mockEntry);
-      showToast(`Simulated FAIL status for ${ticker} (Fallback price: $150.00)`, 'error');
-    } else {
-      const updatedStatus = currentEntry.lastFetchStatus === 'fail' ? 'success' : 'fail';
-      storage.setPriceCacheEntry(cacheKey, {
-        ...currentEntry,
-        lastFetchStatus: updatedStatus,
-      });
-      showToast(
-        `Set ${ticker} price status to ${updatedStatus.toUpperCase()} (Price: $${currentEntry.price.toFixed(2)})`,
-        updatedStatus === 'fail' ? 'error' : 'success'
-      );
-    }
-    setStorageVersion((v) => v + 1);
   };
 
   // Seed Sample Multi-Broker Trades for testing merged vs per-broker views
@@ -323,7 +323,13 @@ export const StockDetail: React.FC = () => {
             className="gap-1.5 text-xs"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingAll ? 'animate-spin' : ''}`} />
-            <span>{isRefreshingAll ? 'Refreshing...' : 'Refresh Prices'}</span>
+            <span>
+              {isRefreshingAll
+                ? refreshProgress && refreshProgress.total > 0
+                  ? `Refreshing ${refreshProgress.current}/${refreshProgress.total}...`
+                  : 'Refreshing...'
+                : 'Refresh Prices'}
+            </span>
           </Button>
 
           <Link to="/stock-form">
@@ -647,26 +653,7 @@ export const StockDetail: React.FC = () => {
                 </div>
 
                 {/* Card Controls Bar */}
-                <div className="flex items-center justify-between pt-1 text-xs">
-                  {/* Simulate Fail Status button (for testing fallback + red light) */}
-                  <button
-                    onClick={() => handleSimulateStatusFail(pos.ticker, pos.market)}
-                    className="flex items-center gap-1 text-[10px] text-[#86868b] hover:text-amber-400 font-mono transition-colors"
-                    title="Toggle Price Status to FAIL to test red status light & fallback behavior"
-                  >
-                    {status === 'success' ? (
-                      <>
-                        <ZapOff className="w-3 h-3 text-amber-500" />
-                        <span>Simulate Fail Light</span>
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="w-3 h-3 text-emerald-400" />
-                        <span>Reset Success Light</span>
-                      </>
-                    )}
-                  </button>
-
+                <div className="flex items-center justify-end pt-1 text-xs">
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setExpandedTicker(isExpanded ? null : pos.ticker)}

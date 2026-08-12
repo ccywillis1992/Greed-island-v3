@@ -9,7 +9,8 @@ import {
   Tooltip,
   CartesianGrid,
 } from 'recharts';
-import { storage, STORAGE_ERROR_EVENT } from '../lib/storage';
+import { storage, STORAGE_ERROR_EVENT, PRICE_CACHE_UPDATED_EVENT } from '../lib/storage';
+import { batchFetchPrices, shouldAutoRefresh, recordAutoRefreshTime } from '../lib/priceApi';
 import {
   computePositions,
   computeSummaryNumbers,
@@ -60,6 +61,7 @@ export const Summary: React.FC = () => {
 
   // State stats
   const [storageError, setStorageError] = useState<string | null>(null);
+  const [priceVersion, setPriceVersion] = useState<number>(0);
   const [counts, setCounts] = useState({
     trades: 0,
     cash: 0,
@@ -69,7 +71,7 @@ export const Summary: React.FC = () => {
 
   // Load storage data
   const trades = useMemo(() => storage.getTrades(), [counts.trades]);
-  const priceCache = useMemo(() => storage.getPriceCache(), [counts.trades]);
+  const priceCache = useMemo(() => storage.getPriceCache(), [counts.trades, priceVersion]);
   const otherProducts = useMemo(() => storage.getOtherProducts(), [counts.other]);
   const cashEntries = useMemo(() => storage.getCashEntries(), [counts.cash]);
 
@@ -101,6 +103,20 @@ export const Summary: React.FC = () => {
     setSnapshots(syncRes.updatedSnapshots);
   }, [overallSummary.numberA, overallSummary.numberD]);
 
+  // Auto-refresh prices on app start if session throttle condition is met
+  useEffect(() => {
+    if (overallPositions.length > 0 && shouldAutoRefresh()) {
+      recordAutoRefreshTime();
+      const itemsToFetch = Array.from(
+        new Set<string>(overallPositions.map((p) => `${p.market}:${p.ticker}`))
+      ).map((key) => {
+        const [market, ticker] = key.split(':') as [MarketFilter, string];
+        return { ticker, market: market as any };
+      });
+      batchFetchPrices(itemsToFetch, 4, 100);
+    }
+  }, [overallPositions]);
+
   // Calculate performance metrics (% returns over 1D, YTD, 1M, 3M, 1Y)
   const perfMetrics = useMemo(() => computePerformance(snapshots), [snapshots]);
 
@@ -123,9 +139,15 @@ export const Summary: React.FC = () => {
       setStorageError(customEvent.detail?.error || 'A storage error occurred');
     };
 
+    const handlePriceCacheUpdate = () => {
+      setPriceVersion((v) => v + 1);
+    };
+
     window.addEventListener(STORAGE_ERROR_EVENT, handleStorageError);
+    window.addEventListener(PRICE_CACHE_UPDATED_EVENT, handlePriceCacheUpdate);
     return () => {
       window.removeEventListener(STORAGE_ERROR_EVENT, handleStorageError);
+      window.removeEventListener(PRICE_CACHE_UPDATED_EVENT, handlePriceCacheUpdate);
     };
   }, []);
 

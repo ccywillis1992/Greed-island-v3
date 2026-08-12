@@ -79,6 +79,34 @@ export function normalizeSymbolClient(ticker: string, market: Market): { symbol:
 }
 
 /**
+ * Helper to execute fetch calls with a strict timeout (default 7 seconds)
+ */
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs: number = 7000): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    return res;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Session throttling for auto-refresh on app load (5 minute cooldown)
+ */
+let lastAutoRefreshTime = 0;
+const AUTO_REFRESH_THROTTLE_MS = 5 * 60 * 1000; // 5 minutes
+
+export function shouldAutoRefresh(): boolean {
+  return Date.now() - lastAutoRefreshTime > AUTO_REFRESH_THROTTLE_MS;
+}
+
+export function recordAutoRefreshTime(): void {
+  lastAutoRefreshTime = Date.now();
+}
+
+/**
  * Module 3: getUsdHkdRate()
  * Calls a free public FX API directly. Used internally to convert HKD to USD.
  * The app never displays HKD — conversion happens invisibly inside this module.
@@ -91,7 +119,7 @@ export async function getUsdHkdRate(): Promise<number> {
 
   // 1. Try open.er-api.com
   try {
-    const res = await fetch('https://open.er-api.com/v6/latest/USD');
+    const res = await fetchWithTimeout('https://open.er-api.com/v6/latest/USD', {}, 4000);
     if (res.ok) {
       const data = await res.json();
       const hkdRate = data?.rates?.HKD;
@@ -106,7 +134,7 @@ export async function getUsdHkdRate(): Promise<number> {
 
   // 2. Fallback to exchangerate-api
   try {
-    const res = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+    const res = await fetchWithTimeout('https://api.exchangerate-api.com/v4/latest/USD', {}, 4000);
     if (res.ok) {
       const data = await res.json();
       const hkdRate = data?.rates?.HKD;
@@ -145,7 +173,7 @@ async function fetchDirectFallback(ticker: string, market: Market): Promise<Pric
   if (!isStaticHost) {
     try {
       const localApiUrl = `/api/price?ticker=${encodeURIComponent(formattedTicker)}&market=${market}`;
-      const res = await fetch(localApiUrl);
+      const res = await fetchWithTimeout(localApiUrl, {}, 3000);
       const contentType = res.headers.get('content-type') || '';
       if (res.ok && contentType.includes('application/json')) {
         const json = await res.json();
@@ -186,7 +214,7 @@ async function fetchDirectFallback(ticker: string, market: Market): Promise<Pric
 
   for (const { url, isWrapped } of urlsToTry) {
     try {
-      const res = await fetch(url);
+      const res = await fetchWithTimeout(url, {}, 5000);
       if (!res.ok) {
         lastStatus = res.status;
         if (res.status === 404) {
@@ -290,7 +318,7 @@ export async function getStockPrice(
       const cleanBase = workerBase.trim().replace(/\/+$/, '');
       const fetchUrl = `${cleanBase}/price?ticker=${encodeURIComponent(formattedTicker)}&market=${market}`;
 
-      const res = await fetch(fetchUrl);
+      const res = await fetchWithTimeout(fetchUrl, {}, 7000);
       const json = await res.json();
 
       if (res.ok && typeof json.price === 'number') {
@@ -389,7 +417,7 @@ export async function getCryptoPrice(symbolInput: string): Promise<PriceFetchRes
 
   try {
     const url = `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(coinGeckoId)}&vs_currencies=usd`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url, {}, 7000);
 
     if (res.ok) {
       const data = await res.json();
@@ -526,22 +554,51 @@ export async function fetchStockPrice(
 
 /**
  * Module 3: Reasonable request batching/throttling
- * Sequences or chunks requests (max 3 concurrency, 150ms delay between chunks)
- * so opening a page with 20 holdings doesn't burst free-tier rate limits.
+ * Sequences or chunks requests (max 4 concurrency, 100ms delay between chunks)
+ * Uses Promise.allSettled so individual failures never block or crash the batch.
  */
 export async function batchFetchPrices(
   items: Array<{ ticker: string; market: Market }>,
-  concurrency: number = 3,
-  delayMsBetweenBatches: number = 150
+  concurrency: number = 4,
+  delayMsBetweenBatches: number = 100,
+  onProgress?: (completed: number, total: number) => void
 ): Promise<PriceFetchResult[]> {
   const results: PriceFetchResult[] = [];
+  let completed = 0;
 
   for (let i = 0; i < items.length; i += concurrency) {
     const chunk = items.slice(i, i + concurrency);
-    const chunkResults = await Promise.all(
-      chunk.map((item) => refreshPrice(item.ticker, item.market))
-    );
-    results.push(...chunkResults);
+
+    const chunkPromises = chunk.map(async (item) => {
+      try {
+        const res = await refreshPrice(item.ticker, item.market);
+        return res;
+      } catch (err) {
+        const cacheKey = `${item.market}:${item.ticker}`;
+        const existingCache = storage.getPriceCache()[cacheKey];
+        return {
+          success: false,
+          ticker: item.ticker,
+          market: item.market,
+          symbol: item.ticker,
+          price: existingCache?.price,
+          error: err instanceof Error ? err.message : 'Unknown refresh error',
+          status: 500,
+        };
+      } finally {
+        completed++;
+        if (onProgress) {
+          onProgress(completed, items.length);
+        }
+      }
+    });
+
+    const chunkSettled = await Promise.allSettled(chunkPromises);
+    for (const res of chunkSettled) {
+      if (res.status === 'fulfilled') {
+        results.push(res.value);
+      }
+    }
 
     if (i + concurrency < items.length && delayMsBetweenBatches > 0) {
       await new Promise((resolve) => setTimeout(resolve, delayMsBetweenBatches));
